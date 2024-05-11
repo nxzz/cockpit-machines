@@ -267,6 +267,7 @@ export async function domainCreate({
     accessToken,
     loggedUser,
     sshKeys,
+    cloudInitYaml,
 }) {
     // shows dummy vm  until we get vm from virsh (cleans up inProgress)
     setVmCreateInProgress(vmName, connectionName, { openConsoleTab: startVm });
@@ -297,6 +298,7 @@ export async function domainCreate({
         userPassword,
         vmName,
         sshKeys,
+        cloudInitYaml,
     };
 
     logDebug(`CREATE_VM(${vmName}): install_machine.py '${JSON.stringify(args)}'`);

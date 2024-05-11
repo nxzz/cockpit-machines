@@ -138,25 +138,28 @@ def prepare_cloud_init(args):
             suffix="-user-data",
             mode='w+'
         )
-        user_data_file.write("#cloud-config\n")
-        if args['userLogin']:
-            user_data_file.write("users:\n")
-            user_data_file.write(f"  - name: {args['userLogin']}\n")
-            if 'sshKeys' in args and len(args['sshKeys']) > 0:
-                user_data_file.write("    ssh_authorized_keys:\n")
-                for key in args['sshKeys']:
-                    user_data_file.write(f"      - {key}\n")
+        if args['cloudInitYaml']:
+            user_data_file.write(args['cloudInitYaml'])
+        else:
+            user_data_file.write("#cloud-config\n")
+            if args['userLogin']:
+                user_data_file.write("users:\n")
+                user_data_file.write(f"  - name: {args['userLogin']}\n")
+                if 'sshKeys' in args and len(args['sshKeys']) > 0:
+                    user_data_file.write("    ssh_authorized_keys:\n")
+                    for key in args['sshKeys']:
+                        user_data_file.write(f"      - {key}\n")
 
-        if args['rootPassword'] or args['userPassword']:
-            # enable SSH password login if any password is set
-            user_data_file.write("ssh_pwauth: true\n")
-            user_data_file.write("chpasswd:\n")
-            user_data_file.write("  list: |\n")
-            if args['rootPassword']:
-                user_data_file.write(f"    root:{args['rootPassword']}\n")
-            if args['userPassword']:
-                user_data_file.write(f"    {args['userLogin']}:{args['userPassword']}\n")
-            user_data_file.write("  expire: False\n")
+            if args['rootPassword'] or args['userPassword']:
+                # enable SSH password login if any password is set
+                user_data_file.write("ssh_pwauth: true\n")
+                user_data_file.write("chpasswd:\n")
+                user_data_file.write("  list: |\n")
+                if args['rootPassword']:
+                    user_data_file.write(f"    root:{args['rootPassword']}\n")
+                if args['userPassword']:
+                    user_data_file.write(f"    {args['userLogin']}:{args['userPassword']}\n")
+                user_data_file.write("  expire: False\n")
 
         user_data_file.flush()
         params.append(f"user-data={user_data_file.name}")

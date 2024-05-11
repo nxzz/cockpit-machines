@@ -863,6 +863,14 @@ const CloudInitOptionsRow = ({
                 actionLabel={_("Add SSH keys")}
                 onChange={value => onValueChanged('sshKeys', value)}
                 itemcomponent={ <SshKeysRow />} />
+                
+            <FormGroup fieldId="cloud-init-yaml"
+                        id="create-vm-dialog-cloud-init-yaml"
+                        label={_("cloud-init YAML")}>
+                <TextArea
+                    onChange={(_, value) => onValueChanged('cloudInitYaml',value)}
+                    rows="5" />
+            </FormGroup>
         </>
     );
 };
@@ -1074,6 +1082,7 @@ class CreateVmModal extends React.Component {
             accessToken: '',
             offlineToken: '',
             sshKeys: [],
+            cloudInitYaml: '',
         };
         this.onCreateClicked = this.onCreateClicked.bind(this);
         this.onValueChanged = this.onValueChanged.bind(this);
@@ -1268,6 +1277,7 @@ class CreateVmModal extends React.Component {
                 rootPassword: this.state.rootPassword,
                 userLogin: this.state.userLogin,
                 sshKeys: this.state.sshKeys.map(key => key.value),
+                cloudInitYaml: this.state.cloudInitYaml,
                 startVm,
                 accessToken: this.state.accessToken,
                 loggedUser
