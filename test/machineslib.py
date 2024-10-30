@@ -23,6 +23,7 @@ import traceback
 import netlib
 import storagelib
 import testlib
+from machine import testvm
 
 
 def hasMonolithicDaemon(image):
@@ -33,9 +34,14 @@ def hasMonolithicDaemon(image):
 
 
 class VirtualMachinesCaseHelpers:
+    machine: testvm.Machine
+
     def waitPageInit(self):
-        virtualization_disabled_ignored = self.browser.call_js_func("localStorage.getItem", "virtualization-disabled-ignored") == "true"
-        virtualization_enabled = "PASS" in self.machine.execute("virt-host-validate qemu | grep 'Checking for hardware virtualization'")
+        m = self.machine
+        virtualization_disabled_ignored = \
+                self.browser.call_js_func("localStorage.getItem", "virtualization-disabled-ignored") == "true"
+        virtualization_enabled = \
+                "PASS" in m.execute("virt-host-validate qemu | grep 'Checking for hardware virtualization' || true")
         if not virtualization_enabled and not virtualization_disabled_ignored:
             self.browser.click("#ignore-hw-virtualization-disabled-btn")
         with self.browser.wait_timeout(30):
@@ -102,12 +108,13 @@ class VirtualMachinesCaseHelpers:
             b.wait_not_present(vm_row)
 
     def togglePoolRow(self, poolName, connectionName="system"):
-        isExpanded = 'pf-m-expanded' in self.browser.attr(f"tbody tr[data-row-id=\"pool-{poolName}-{connectionName}\"] + tr", "class")  # click on the row header
-        self.browser.click(f"tbody tr[data-row-id=\"pool-{poolName}-{connectionName}\"] .pf-v5-c-table__toggle button")  # click on the row header
+        b = self.browser
+        isExpanded = 'pf-m-expanded' in b.attr(f"tbody tr[data-row-id=\"pool-{poolName}-{connectionName}\"] + tr", "class")
+        b.click(f"tbody tr[data-row-id=\"pool-{poolName}-{connectionName}\"] .pf-v5-c-table__toggle button")
         if isExpanded:
-            self.browser.wait_not_present(f"tbody tr[data-row-id=\"pool-{poolName}-{connectionName}\"] + tr.pf-m-expanded")  # click on the row header
+            b.wait_not_present(f"tbody tr[data-row-id=\"pool-{poolName}-{connectionName}\"] + tr.pf-m-expanded")
         else:
-            self.browser.wait_visible(f"tbody tr[data-row-id=\"pool-{poolName}-{connectionName}\"] + tr.pf-m-expanded")  # click on the row header
+            b.wait_visible(f"tbody tr[data-row-id=\"pool-{poolName}-{connectionName}\"] + tr.pf-m-expanded")
 
     def waitPoolRow(self, poolName, connectionName="system", present=True):
         b = self.browser
@@ -118,12 +125,14 @@ class VirtualMachinesCaseHelpers:
             b.wait_not_present(pool_row)
 
     def toggleNetworkRow(self, networkName, connectionName="system"):
-        isExpanded = 'pf-m-expanded' in self.browser.attr(f"tbody tr[data-row-id=\"network-{networkName}-{connectionName}\"] + tr", "class")  # click on the row header
-        self.browser.click(f"tbody tr[data-row-id=\"network-{networkName}-{connectionName}\"] .pf-v5-c-table__toggle button")  # click on the row header
+        b = self.browser
+        isExpanded = 'pf-m-expanded' in b.attr(f"tbody tr[data-row-id=\"network-{networkName}-{connectionName}\"] + tr",
+                                                          "class")
+        b.click(f"tbody tr[data-row-id=\"network-{networkName}-{connectionName}\"] .pf-v5-c-table__toggle button")
         if isExpanded:
-            self.browser.wait_not_present(f"tbody tr[data-row-id=\"network-{networkName}-{connectionName}\"] + tr.pf-m-expanded")  # click on the row header
+            b.wait_not_present(f"tbody tr[data-row-id=\"network-{networkName}-{connectionName}\"] + tr.pf-m-expanded")
         else:
-            self.browser.wait_visible(f"tbody tr[data-row-id=\"network-{networkName}-{connectionName}\"] + tr.pf-m-expanded")  # click on the row header
+            b.wait_visible(f"tbody tr[data-row-id=\"network-{networkName}-{connectionName}\"] + tr.pf-m-expanded")
 
     def waitNetworkRow(self, networkName, connectionName="system", present=True):
         b = self.browser
@@ -136,6 +145,14 @@ class VirtualMachinesCaseHelpers:
     def getDomainMacAddress(self, vmName):
         dom_xml = f"virsh -c qemu:///system dumpxml --domain {vmName}"
         return self.machine.execute(f"{dom_xml} | xmllint --xpath 'string(//domain/devices/interface/mac/@address)' -").strip()
+
+    def getDomainXpathValue(self, vmName: str, xpath: str, *, str_value: bool = False, inactive: bool = False):
+        dom_xml = f"virsh dumpxml {vmName} "
+        if inactive:
+            dom_xml += "--inactive "
+        if str_value:
+            xpath = f"string({xpath})"
+        return self.machine.execute(f"{dom_xml} | xmllint --xpath '{xpath}' -").strip()
 
     def getLibvirtServiceName(self):
         m = self.machine
@@ -156,7 +173,8 @@ class VirtualMachinesCaseHelpers:
                      if ! echo "$out" | grep -q 'Active.*yes'; then virsh net-start default; fi""")
         m.execute(r"until virsh net-info default | grep 'Active:\s*yes'; do sleep 1; done")
 
-    def createVm(self, name, graphics='none', ptyconsole=False, running=True, memory=128, connection='system', machine=None, os=None):
+    def createVm(self, name, graphics='none', ptyconsole=False, running=True, memory=128,
+                 connection='system', machine=None, os=None):
         m = machine or self.machine
 
         if os is None:
@@ -298,7 +316,7 @@ class VirtualMachinesCaseHelpers:
         cmds = [
             # Generate certificate for https server
             f"cd {self.vm_tmpdir}",
-            f"openssl req -x509 -newkey rsa:4096 -nodes -keyout server.key -new -out server.crt -config {self.vm_tmpdir}/min-openssl-config.cnf -sha256 -days 365 -extensions dn"
+            f"openssl req -x509 -newkey rsa:4096 -nodes -keyout server.key -new -out server.crt -config {self.vm_tmpdir}/min-openssl-config.cnf -sha256 -days 365 -extensions dn"  # noqa: E501
         ]
 
         if self.machine.image.startswith("ubuntu") or self.machine.image.startswith("debian"):
@@ -310,6 +328,11 @@ class VirtualMachinesCaseHelpers:
             cmds += [
                 f"cp {self.vm_tmpdir}/server.crt /etc/ca-certificates/trust-source/anchors/server.crt",
                 "update-ca-trust"
+            ]
+        elif "suse" in self.machine.image:
+            cmds += [
+                f"cp {self.vm_tmpdir}/server.crt /etc/pki/trust/anchors/server.crt",
+                "update-ca-certificates"
             ]
         else:
             cmds += [
@@ -325,7 +348,8 @@ class VirtualMachinesCaseHelpers:
         #
         # and on certain distribution supports only https (not http)
         # see: block-drv-ro-whitelist option in qemu-kvm.spec for certain distribution
-        return self.machine.spawn(f"cd /var/lib/libvirt; exec python3 {self.vm_tmpdir}/{mock_server_filename} {self.vm_tmpdir}/server.crt {self.vm_tmpdir}/server.key", "httpsserver")
+        return self.machine.spawn(f"cd /var/lib/libvirt; exec python3 {self.vm_tmpdir}/{mock_server_filename} {self.vm_tmpdir}/server.crt {self.vm_tmpdir}/server.key",  # noqa: E501
+                                  "httpsserver")
 
     def waitLogFile(self, logfile, expected_text):
         try:
@@ -338,35 +362,49 @@ class VirtualMachinesCaseHelpers:
     def waitGuestBooted(self, logfile):
         self.waitLogFile(logfile, "Welcome to Alpine Linux")
 
+    def waitDisks(self, expected_disks: list[str], vm="subVmTest1"):
+        """Wait until Disks table initialized on the details
+
+        This prevents the kebabs from jumping around during re-renders, which
+        makes trying to click on them racy.
+        """
+        for disk in expected_disks:
+            self.browser.wait_visible(f"#vm-{vm}-disks-{disk}-device")  # type: ignore[attr-defined]
+        # HACK: we need to wait on *something* else, but no idea what..
+        time.sleep(0.5)
+
 
 class VirtualMachinesCase(testlib.MachineCase, VirtualMachinesCaseHelpers, storagelib.StorageHelpers, netlib.NetworkHelpers):
     def setUp(self):
         super().setUp()
 
-        m = self.machine
+        for m in self.machines:
+            m = self.machines[m]
 
-        # We don't want nested KVM since it doesn't work well enough
-        # three levels deep.
-        #
-        # The first level is the VM allocated to us that runs our
-        # "tasks" container in certain environments, the second level
-        # is the VM started by testlib.py to run a given test, and the
-        # third level are the VMS started by the test itself.  In most
-        # environments, the "tasks" container runs on bare metal, and
-        # the VMs started here are on level 2.
-        #
-        # Using KVM on level 3 is significantly slower than software
-        # emulation, by something like a factor of 2 at least, and
-        # much worse on a machine with many VMs to the point that the
-        # kernel will trigger its NMI watchdog and the boot never
-        # finishes. So we switch it off by removing "/dev/kvm".
-        #
-        # Our environments where the VMs started by the tests are on
-        # level 2 don't have support for nested KVM. So "/dev/kvm"
-        # does not exist in the first place and we don't need to be
-        # careful to leave it in place.
-        #
-        m.execute("rm -f /dev/kvm")
+            # We don't want nested KVM since it doesn't work well enough
+            # three levels deep.
+            #
+            # The first level is the VM allocated to us that runs our
+            # "tasks" container in certain environments, the second level
+            # is the VM started by testlib.py to run a given test, and the
+            # third level are the VMS started by the test itself.  In most
+            # environments, the "tasks" container runs on bare metal, and
+            # the VMs started here are on level 2.
+            #
+            # Using KVM on level 3 is significantly slower than software
+            # emulation, by something like a factor of 2 at least, and
+            # much worse on a machine with many VMs to the point that the
+            # kernel will trigger its NMI watchdog and the boot never
+            # finishes. So we switch it off by removing "/dev/kvm".
+            #
+            # Our environments where the VMs started by the tests are on
+            # level 2 don't have support for nested KVM. So "/dev/kvm"
+            # does not exist in the first place and we don't need to be
+            # careful to leave it in place.
+            #
+            m.execute("rm -f /dev/kvm")
+
+        m = self.machine
 
         # Keep pristine state of libvirt
         self.restore_dir("/var/lib/libvirt")
@@ -379,6 +417,10 @@ class VirtualMachinesCase(testlib.MachineCase, VirtualMachinesCaseHelpers, stora
         if not hasMonolithicDaemon(m.image):
             self.addCleanup(m.execute, "systemctl stop virtstoraged.service virtnetworkd.service")
 
+        # HACK: https://issues.redhat.com/browse/RHEL-49567
+        for mach in self.machines.values():
+            mach.execute('if test "$(rpmquery selinux-policy)" = selinux-policy-40.13.6-1.el10.noarch; then setenforce 0; fi')
+
         def stop_all():
             # domains
             # this is a race condition: a test may leave a domain shutting down, so it may go away while iterating
@@ -387,7 +429,7 @@ class VirtualMachinesCase(testlib.MachineCase, VirtualMachinesCaseHelpers, stora
                       '    echo "$out" | grep -q "domain is not running"; '
                       "  fi; done")
             m.execute("runuser -l admin -c 'for d in $(virsh -c qemu:///session list --all --name); do "
-                      "virsh -c qemu:///session undefine $d; done'")
+                      "virsh -c qemu:///session undefine $d --snapshots-metadata; done'")
 
             # pools
             m.execute("rm -rf /run/libvirt/storage/*")
@@ -415,22 +457,22 @@ class VirtualMachinesCase(testlib.MachineCase, VirtualMachinesCaseHelpers, stora
 
         # user libvirtd instance tends to SIGABRT with "Failed to find user record for uid .." on shutdown during cleanup
         # so make sure that there are no leftover user processes that bleed into the next test
-        self.addCleanup(self.machine.execute, '''pkill -u admin || true; while [ -n "$(pgrep -au admin | grep -v 'systemd --user')" ]; do sleep 0.5; done''')
+        clean_cmd = '''pkill -u admin || true; while [ -n "$(pgrep -au admin | grep -v 'systemd --user')" ]; do sleep 0.5; done'''
+        self.addCleanup(m.execute, clean_cmd)
 
         # FIXME: report downstream; AppArmor noisily denies some operations, but they are not required for us
-        self.allow_journal_messages(r'.* type=1400 .* apparmor="DENIED" operation="capable" profile="\S*libvirtd.* capname="sys_rawio".*')
+        self.allow_journal_messages(
+                r'.* type=1400 .* apparmor="DENIED" operation="capable" profile="\S*libvirtd.* capname="sys_rawio".*')
         # AppArmor doesn't like the non-standard path for our storage pools
-        self.allow_journal_messages('.* type=1400 .* apparmor="DENIED" operation="open".* profile="virt-aa-helper" name="%s.*' % self.vm_tmpdir)
-        if m.image in ["ubuntu-stable"]:
-            self.allow_journal_messages('.* type=1400 .* apparmor="DENIED" operation="open" profile="libvirt.* name="/" .* denied_mask="r" .*')
-            self.allow_journal_messages('.* type=1400 .* apparmor="DENIED" operation="open" profile="libvirt.* name="/sys/bus/nd/devices/" .* denied_mask="r" .*')
+        self.allow_journal_messages(
+                f'.* type=1400 .* apparmor="DENIED" operation="open".* profile="virt-aa-helper" name="{self.vm_tmpdir}.*')
 
         # FIXME: Testing on Arch Linux fails randomly with networkmanager time outs while the test passes.
         if m.image == 'arch':
-            self.allow_journal_messages(r".* couldn't get all properties of org.freedesktop.NetworkManager.Device at /org/freedesktop/NetworkManager/Devices/\d+: Timeout was reached")
+            self.allow_journal_messages(r".* couldn't get all properties of org.freedesktop.NetworkManager.Device at /org/freedesktop/NetworkManager/Devices/\d+: Timeout was reached")  # noqa: E501
 
         # avoid error noise about resources getting cleaned up
-        self.addCleanup(lambda: not self.browser.cdp.valid or self.browser.logout())
+        self.addCleanup(lambda: not self.browser.valid or self.browser.logout())
 
         # noVNC warns about this for non-TLS connections; for RHEL downstream testing
         self.allow_browser_errors("noVNC requires a secure context")
@@ -493,7 +535,7 @@ class VirtualMachinesCase(testlib.MachineCase, VirtualMachinesCaseHelpers, stora
 
     def tearDown(self):
         b = self.browser
-        if b.cdp.valid and b.is_present("#button.alert-link.more-button"):
+        if b.valid and b.is_present("#button.alert-link.more-button"):
             b.click("button.alert-link.more-button")
 
         if self.getError():

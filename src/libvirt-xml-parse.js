@@ -216,14 +216,16 @@ export function parseDomainSnapshotDumpxml(snapshot) {
     const nameElem = getSingleOptionalElem(snapElem, 'name');
     const descElem = getSingleOptionalElem(snapElem, 'description');
     const parentElem = getSingleOptionalElem(snapElem, 'parent');
+    const memElem = getSingleOptionalElem(snapElem, 'memory');
 
     const name = nameElem?.childNodes[0].nodeValue;
     const description = descElem?.childNodes[0].nodeValue;
     const parentName = parentElem?.getElementsByTagName("name")[0].childNodes[0].nodeValue;
     const state = snapElem.getElementsByTagName("state")[0].childNodes[0].nodeValue;
     const creationTime = snapElem.getElementsByTagName("creationTime")[0].childNodes[0].nodeValue;
+    const memoryPath = memElem?.getAttribute("file");
 
-    return { name, description, state, creationTime, parentName };
+    return { name, description, state, creationTime, parentName, memoryPath };
 }
 
 export function parseDomainDumpxml(connectionName, domXml, objPath) {
@@ -245,6 +247,8 @@ export function parseDomainDumpxml(connectionName, domXml, objPath) {
     const metadataElem = getSingleOptionalElem(domainElem, "metadata");
 
     const name = domainElem.getElementsByTagName("name")[0].childNodes[0].nodeValue;
+    const uuid = domainElem.getElementsByTagName("uuid")[0].childNodes[0].nodeValue;
+    const description = domainElem.getElementsByTagName("description")[0]?.childNodes[0]?.nodeValue;
     const id = objPath;
     const osType = osTypeElem.childNodes[0].nodeValue;
     const osBoot = parseDumpxmlForOsBoot(osBootElems);
@@ -292,7 +296,9 @@ export function parseDomainDumpxml(connectionName, domXml, objPath) {
 
     return {
         connectionName,
+        uuid,
         name,
+        description,
         id,
         osType,
         osBoot,
@@ -636,8 +642,11 @@ export function parseDumpxmlForHostDevices(devicesElem) {
         for (let i = 0; i < hostdevElems.length; i++) {
             const hostdevElem = hostdevElems[i];
             const bootElem = getSingleOptionalElem(hostdevElem, 'boot');
+            const driverElem = getSingleOptionalElem(hostdevElem, 'driver');
             const type = hostdevElem.getAttribute('type');
             const mode = hostdevElem.getAttribute('mode');
+            const driver = driverElem?.getAttribute('name');
+
             let dev;
 
             switch (type) {
@@ -655,6 +664,7 @@ export function parseDumpxmlForHostDevices(devicesElem) {
                     type,
                     mode,
                     bootOrder: bootElem?.getAttribute('order'),
+                    driver,
                     address: {
                         port: addressElem?.getAttribute('port'),
                     },
@@ -685,6 +695,7 @@ export function parseDumpxmlForHostDevices(devicesElem) {
                     type,
                     mode,
                     bootOrder: bootElem?.getAttribute('order'),
+                    driver,
                     source: {
                         address: {
                             vendor: {
@@ -716,6 +727,7 @@ export function parseDumpxmlForHostDevices(devicesElem) {
                     type,
                     mode,
                     bootOrder: bootElem?.getAttribute('order'),
+                    driver,
                     source: {
                         protocol,
                         name,
@@ -739,6 +751,7 @@ export function parseDumpxmlForHostDevices(devicesElem) {
                     type,
                     mode,
                     bootOrder: bootElem?.getAttribute('order'),
+                    driver,
                     source: {
                         protocol: sourceElem.getAttribute('protocol'),
                         wwpn: sourceElem.getAttribute('wwpn'),
@@ -755,6 +768,7 @@ export function parseDumpxmlForHostDevices(devicesElem) {
                     type,
                     mode,
                     bootOrder: bootElem?.getAttribute('order'),
+                    driver,
                     source: {
                         address: {
                             uuid: addressElem.getAttribute('uuid'),
@@ -772,6 +786,7 @@ export function parseDumpxmlForHostDevices(devicesElem) {
                     type,
                     mode,
                     bootOrder: bootElem?.getAttribute('order'),
+                    driver,
                     source: {
                         block: blockElem.childNodes[0].nodeValue
                     },
@@ -802,6 +817,7 @@ export function parseDumpxmlForHostDevices(devicesElem) {
                     type,
                     mode,
                     bootOrder: bootElem?.getAttribute('order'),
+                    driver,
                     source: {
                         interface: interfaceElem.childNodes[0].nodeValue
                     },
@@ -881,15 +897,6 @@ export function parseDumpxmlMachinesMetadataElement(metadataElem, name) {
     const subElems = metadataElem.getElementsByTagNameNS(METADATA_NAMESPACE, name);
 
     return subElems.length > 0 ? subElems[0].textContent : null;
-}
-
-export function parseIfaceDumpxml(ifaceXml) {
-    const retObj = {};
-    const ifaceElem = getElem(ifaceXml);
-
-    retObj.type = ifaceElem.getAttribute("type");
-
-    return retObj;
 }
 
 export function parseNetDumpxml(netXml) {

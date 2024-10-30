@@ -46,7 +46,7 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         b.wait_in_text("#vm-subVmTest1-system-state", "Running")
         self.goToVmPage("subVmTest1")
 
-        # Check the synatx of CPU should be "${number} vCPU, ${CPU mode}"
+        # Check the syntax of CPU should be "${number} vCPU, ${CPU mode}"
         b.wait_in_text("#vm-subVmTest1-cpu", "2 vCPUs, ")
 
         # Check "X" on the dialog
@@ -141,7 +141,7 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         b.wait_not_present("#machines-cpu-modal-dialog")
 
         testlib.wait(lambda: m.execute(
-            "virsh dumpxml subVmTest1 | tee /tmp/subVmTest1.xml | xmllint --xpath '/domain/cpu/topology[@sockets=\"2\"][@threads=\"1\"][@cores=\"2\"]' -"))
+            "virsh dumpxml subVmTest1 | tee /tmp/subVmTest1.xml | xmllint --xpath '/domain/cpu/topology[@sockets=\"2\"][@threads=\"1\"][@cores=\"2\"]' -"))  # noqa: E501
 
         # Run VM - this ensures that the internal state is updated before we move on.
         # We need this here because we can't wait for UI updates after we open the modal dialog.
@@ -149,7 +149,6 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         b.wait_in_text("#vm-subVmTest1-system-state", "Running")
 
         # Wait for the VCPUs link to get new values before opening the dialog
-        b.wait_visible("#vm-subVmTest1-cpu")
         b.wait_in_text("#vm-subVmTest1-cpu", "2 vCPUs")
 
         # Open dialog
@@ -165,6 +164,7 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         b.wait_in_text("#vm-subVmTest1-cpu", "2 vCPUs")
 
         # Check value of sockets, threads and cores from VM dumpxml
+        self.getDomainXpathValue("subVmTest1", '/domain/cpu/topology[@sockets=\"2\"][@threads=\"1\"][@cores=\"2\"]')
         m.execute(
             "virsh dumpxml subVmTest1 | xmllint --xpath '/domain/cpu/topology[@sockets=\"2\"][@threads=\"1\"][@cores=\"2\"]' -")
 
@@ -218,7 +218,6 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
 
     def testCPUModel(self):
         b = self.browser
-        m = self.machine
 
         self.createVm("subVmTest1")
 
@@ -238,7 +237,7 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         b.click("#machines-cpu-modal-dialog-apply")
         b.wait_not_present("#machines-cpu-modal-dialog")
 
-        # Warning about about difference in persistent and non-persitent XML should appear
+        # Warning about about difference in persistent and non-persistent XML should appear
         b.wait_visible("#cpu-tooltip")
         b.wait_visible("#vm-subVmTest1-needs-shutdown")
         self.performAction("subVmTest1", "forceOff")
@@ -250,15 +249,13 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         # Choose manually a CPU model
         b.click("#vm-subVmTest1-cpu button")
         b.wait_visible("#machines-cpu-modal-dialog")
-        b.select_from_dropdown("#cpu-model-select-group select", "coreduo")
+        b.select_from_dropdown("#cpu-model-select-group select", "qemu64")
         b.click("#machines-cpu-modal-dialog-apply")
         b.wait_not_present("#machines-cpu-modal-dialog")
-        b.wait_in_text("#vm-subVmTest1-cpu .pf-v5-c-description-list__text", "custom (coreduo)")
+        b.wait_in_text("#vm-subVmTest1-cpu .pf-v5-c-description-list__text", "custom (qemu64)")
 
         # Verify libvirt XML
-        dom_xml = "virsh dumpxml subVmTest1"
-        xmllint_element = f"{dom_xml} | xmllint --xpath 'string(//domain/{{prop}})' -"
-        self.assertEqual("coreduo", m.execute(xmllint_element.format(prop='cpu/model')).strip())
+        self.assertEqual("qemu64", self.getDomainXpathValue('subVmTest1', '/domain/cpu/model', str_value=True))
 
         # Host-model gets expanded  to custom mode when the VM is running
         b.click("#vm-subVmTest1-cpu button")
@@ -277,7 +274,10 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         m = self.machine
 
         args = self.createVm("subVmTest1")
-        m.execute("touch /var/lib/libvirt/images/phonycdrom; virsh attach-disk subVmTest1 /var/lib/libvirt/images/phonycdrom sdb --type cdrom --config")
+        m.execute("""
+            touch /var/lib/libvirt/images/phonycdrom;
+            virsh attach-disk subVmTest1 /var/lib/libvirt/images/phonycdrom sdb --type cdrom --config
+        """)
 
         self.login_and_go("/machines")
         self.waitPageInit()
@@ -301,7 +301,7 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         pci_slot = f"{split[0]}:{split[1]}:{split[2]}.{split[3]}"
         m.execute(f"virt-xml subVmTest1 --add-device --hostdev {pci_slot}")
 
-        # Older libvirt versions don't fire events for host device attachement so we have to reload the page
+        # Older libvirt versions don't fire events for host device attachment so we have to reload the page
         b.reload()
         b.enter_page('/machines')
 
@@ -370,7 +370,8 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
             # re-open and check the boot option is the disk
             b.click("#vm-subVmTest1-boot-order button")
             b.wait_visible("#vm-subVmTest1-order-modal-window")
-            b.wait_text("#vm-subVmTest1-order-modal-device-row-0 .pf-v5-c-description-list__description .pf-v5-c-description-list__text", args["image"])
+            file_desc_sel = ".pf-v5-c-description-list__description .pf-v5-c-description-list__text"
+            b.wait_text(f"#vm-subVmTest1-order-modal-device-row-0 {file_desc_sel}", args["image"])
 
             b.click("#vm-subVmTest1-order-modal-cancel")
             b.wait_not_present("#vm-subVmTest1-order-modal-window")
@@ -407,7 +408,7 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         b.wait_attr("#vm-subVmTest1-memory-modal-max-memory", "disabled", "")
 
         # Check memory hotunplugging
-        # The balloon driver needs to be loaded to descrease memory
+        # The balloon driver needs to be loaded to decrease memory
         self.waitGuestBooted(args['logfile'])
 
         b.set_input_text("#vm-subVmTest1-memory-modal-memory", str(current_memory - 10))
@@ -415,11 +416,11 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         b.click("#vm-subVmTest1-memory-modal-save")
         b.wait_not_present("#vm-memory-modal")
 
-        b.wait_in_text("#vm-subVmTest1-memory-count", f"{f'{current_memory - 10:.1f}'} MiB")
+        b.wait_in_text("#vm-subVmTest1-memory-count", f"{f'{current_memory - 10}'} MiB")
 
         # Shut off domain and check changes are  still there
         self.performAction("subVmTest1", "forceOff")
-        b.wait_in_text("#vm-subVmTest1-memory-count", f"{f'{current_memory - 10:.1f}'} MiB")
+        b.wait_in_text("#vm-subVmTest1-memory-count", f"{f'{current_memory - 10}'} MiB")
 
         # Click for the edit link
         b.click("#vm-subVmTest1-memory-count button")
@@ -440,6 +441,8 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         # Verify that unit conversions work
         b.select_from_dropdown("#vm-subVmTest1-memory-modal-memory-unit-select", "GiB")
         b.wait_attr("#vm-subVmTest1-memory-modal-memory", "value", "0")
+        b.click("#vm-memory-modal button[aria-label='Close']")
+        b.wait_not_present("#vm-memory-modal")
 
         # Run VM
         b.click("#vm-subVmTest1-system-run")
@@ -450,7 +453,6 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
 
     def testMultipleSettings(self):
         b = self.browser
-        m = self.machine
 
         # We want a machine without watchdog
         args = self.createVm("subVmTest1", os="linux2016")
@@ -484,15 +486,11 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         # Shut off domain
         self.performAction("subVmTest1", "forceOff")
 
-        dom_xml = "virsh -c qemu:///system dumpxml subVmTest1"
+        testlib.wait(lambda: cpu_model in self.getDomainXpathValue('subVmTest1', '//domain/cpu/@mode',
+                                                                   str_value=True))
+        testlib.wait(lambda: "3" in self.getDomainXpathValue('subVmTest1', '//domain/vcpu', str_value=True))
 
-        xmllint_elem = f"{dom_xml} | xmllint --xpath 'string(//domain/cpu/@mode)' -"
-        testlib.wait(lambda: cpu_model in m.execute(xmllint_elem).strip())
-
-        xmllint_elem = f"{dom_xml} | xmllint --xpath 'string(//domain/vcpu)' -"
-        testlib.wait(lambda: "3" in m.execute(xmllint_elem).strip())
-
-        virsh_output = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/watchdog/@action' -").strip()
+        virsh_output = self.getDomainXpathValue('subVmTest1', '/domain/devices/watchdog/@action')
         self.assertEqual(virsh_output, 'action="reset"')
 
         # Check both changes have been applied
@@ -521,7 +519,8 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
             b.wait_not_present("#vm-subVmTest1-watchdog-modal")
 
         def setWatchdogAction(action, machine_has_no_watchdog=False, pixel_test_tag=None, reboot_machine=False):
-            # If no watchdog action is set, we are attaching a new watchdog device. If watchdog already is set, we are editing an exiting watchdog device
+            # If no watchdog action is set, we are attaching a new watchdog device.
+            # If watchdog already is set, we are editing an exiting watchdog device.
             if machine_has_no_watchdog:
                 b.wait_in_text("#vm-subVmTest1-watchdog-button", "add")
             else:
@@ -543,7 +542,7 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
 
             b.wait_in_text("#vm-subVmTest1-watchdog-state", action_strings[action])
 
-            virsh_output = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/watchdog/@action' -").strip()
+            virsh_output = self.getDomainXpathValue('subVmTest1', '/domain/devices/watchdog/@action')
             self.assertEqual(virsh_output, f'action="{action}"')
 
         def setWatchdogActionLive(action, previous_action=None, reboot_machine=False, add=False, removable=True):
@@ -570,7 +569,8 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
             closeWatchDogDialog("#watchdog-dialog-apply")
 
             if previous_action:
-                # When editing an exiting watchdog, tooltip should be present on overview card warning user that changes will take effect after reboot
+                # When editing an exiting watchdog, tooltip should be present on overview card
+                # warning user that changes will take effect after reboot.
                 b.wait_visible("#watchdog-tooltip")
                 b.wait_visible("#vm-subVmTest1-needs-shutdown")
             else:
@@ -578,30 +578,33 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
                 b.wait_not_present("#watchdog-tooltip")
                 b.wait_not_present("#vm-subVmTest1-needs-shutdown")
 
-            # Libvirt doesn't support editing wathdog device on RUNNING vm, so a live VM config will persist the previously configured watchdog action until reboot
+            # Libvirt doesn't support editing watchdog device on RUNNING vm, so a live VM config will persist the previously
+            # configured watchdog action until reboot.
             # On the other hand, libvirt does support attaching a watchdog to a RUNNING VM
             # So in summary:
-            # - if no previous watchdog action is configured on a VM (meaning VM has no watchdog device), we are attaching a new wathdog device
+            # - if no previous watchdog action is configured on a VM (meaning VM has no watchdog device),
+            #   we are attaching a new watchdog device
             #   and live VM config have new action set
-            # - if watchdog action is configured on a VM (meaning VM has a watchdog device), we are editing an editing wathdog device
+            # - if watchdog action is configured on a VM (meaning VM has a watchdog device), we are editing an editing watchdog device
             #   and live VM config will persist the old setting until VM is rebooted
             expected_action = previous_action if previous_action else action
             b.wait_in_text("#vm-subVmTest1-watchdog-state", action_strings[expected_action])
-            virsh_output_offline = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/watchdog/@action' -").strip()
+            virsh_output_offline = self.getDomainXpathValue('subVmTest1', '/domain/devices/watchdog/@action')
             self.assertEqual(virsh_output_offline, f'action="{expected_action}"')
 
-            # Offline VM config will always have newly configured watchdog action, no matter if we are attaching a new watchdog device or editing an existing one
-            virsh_output_offline = m.execute("virsh dumpxml subVmTest1 --inactive | xmllint --xpath '/domain/devices/watchdog/@action' -").strip()
+            # Offline VM config will always have newly configured watchdog action, no matter
+            # if we are attaching a new watchdog device or editing an existing one
+            virsh_output_offline = self.getDomainXpathValue('subVmTest1', '/domain/devices/watchdog/@action', inactive=True)
             self.assertEqual(virsh_output_offline, f'action="{action}"')
 
             if reboot_machine:
-                # Check that after rebooting machine, live VM config will have new watchdog condiguration
+                # Check that after rebooting machine, live VM config will have new watchdog configuration
                 self.performAction("subVmTest1", "forceOff")
                 b.click("#vm-subVmTest1-system-run")
                 b.wait_in_text("#vm-subVmTest1-system-state", "Running")
 
                 b.wait_in_text("#vm-subVmTest1-watchdog-state", action_strings[action])
-                virsh_output_current = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/watchdog/@action' -").strip()
+                virsh_output_current = self.getDomainXpathValue('subVmTest1', '/domain/devices/watchdog/@action')
                 self.assertEqual(virsh_output_current, f'action="{action}"')
 
         def removeWatchdogDevice(live=True):
@@ -746,10 +749,12 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         b = self.browser
         m = self.machine
 
-        default_libvirt_vsock_address = "3"  # When we don't specify address, libvit will choose lowest available (3 in case of clean VM)
+        # When we don't specify address, libvit will choose lowest available (3 in case of clean VM)
+        default_libvirt_vsock_address = "3"
 
         def setVsock(auto, address=None, machine_has_no_vsock=False, pixel_test_tag=None, reboot_machine=False):
-            # If no vsock configured, we are attaching a new vsock device. If vsock already is set, we are editing an exiting vsock device
+            # If no vsock configured, we are attaching a new vsock device. If vsock already is set,
+            # we are editing an exiting vsock device
             if machine_has_no_vsock:
                 b.wait_in_text("#vm-subVmTest1-vsock-button", "add")
             else:
@@ -775,8 +780,8 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
 
             b.wait_in_text("#vm-subVmTest1-vsock-address", "assign automatically" if auto else address)
 
-            virsh_output_auto = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/vsock/cid/@auto' -").strip()
-            virsh_output_address = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/vsock/cid/@address' -").strip()
+            virsh_output_auto = self.getDomainXpathValue('subVmTest1', '/domain/devices/vsock/cid/@auto')
+            virsh_output_address = self.getDomainXpathValue('subVmTest1', '/domain/devices/vsock/cid/@address')
             self.assertEqual(virsh_output_auto, 'auto="yes"' if auto else 'auto="no"')
             if not auto:
                 self.assertEqual(virsh_output_address, f'address="{address}"')
@@ -800,18 +805,24 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
             b.wait_not_present("#vm-subVmTest1-vsock-modal")
 
             if previous_address or previous_auto:
-                # When editing an exiting vsock, tooltip should be present on overview card warning user that changes will take effect after reboot
+                # When editing an exiting vsock, tooltip should be present on overview card
+                # warning user that changes will take effect after reboot.
                 b.wait_visible("#vsock-tooltip")
             else:
                 # When attaching adding a new vsock, no tooltip should be present
                 b.wait_not_present("#vsock-tooltip")
 
-            # Libvirt doesn't support editing vsock device on RUNNING vm, so a live VM config will persist the previously configured vsock action until reboot
+            # Libvirt doesn't support editing vsock device on RUNNING vm, so a live VM config will
+            # persist the previously configured vsock action until reboot.
             # On the other hand, libvirt does support attaching a vsock to a RUNNING VM
             # So in summary:
-            # - if no previous vsock is configured on a VM, we are attaching a new vsock device and live VM config will get updated
-            # - if vsock action is configured on a VM, and we are editing an editing vsock device, the live VM config will persist the old setting until VM is rebooted
-            virsh_output_auto = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/vsock/cid/@auto' -").strip()
+            # - if no previous vsock is configured on a VM, we are attaching a new vsock device and
+            #   live VM config will get updated
+            # - if vsock action is configured on a VM, and we are editing an editing vsock device,
+            #    the live VM config will persist
+            #   the old setting until VM is rebooted
+            vmName = 'subVmTest1'
+            virsh_output_auto = self.getDomainXpathValue(vmName, '/domain/devices/vsock/cid/@auto')
             if previous_auto is not None:  # Editing exiting vsock
                 expected_auto = "yes" if previous_auto else "no"
             else:  # Attaching new vsock
@@ -824,34 +835,35 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
                 if new_address is not None:
                     expected_address = new_address   # Attaching new vsock, new vsock is already present in live VM
                 else:
-                    expected_address = default_libvirt_vsock_address  # When we don't specify address, libvit will choose
+                    expected_address = default_libvirt_vsock_address  # When we don't specify address, libvirt will choose
             b.wait_in_text("#vm-subVmTest1-vsock-address", expected_address)
-            virsh_output_address = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/vsock/cid/@address' -").strip()
+            virsh_output_address = self.getDomainXpathValue(vmName, '/domain/devices/vsock/cid/@address')
             self.assertEqual(virsh_output_address, f'address="{expected_address}"')
 
-            # Offline VM config will always have newly configured vsock, no matter if we are attaching a new vsock device or editing an existing one
+            # Offline VM config will always have newly configured vsock, no matter if we are attaching
+            # a new vsock device or editing an existing one.
             expected_auto_offline = "yes" if new_auto else "no"
-            virsh_output_offline_auto = m.execute("virsh dumpxml subVmTest1 --inactive | xmllint --xpath '/domain/devices/vsock/cid/@auto' -").strip()
+            virsh_output_offline_auto = self.getDomainXpathValue(vmName, '/domain/devices/vsock/cid/@auto', inactive=True)
             self.assertEqual(virsh_output_offline_auto, f'auto="{expected_auto_offline}"')
 
             expected_address_offline = new_address
-            virsh_output_offline_address = m.execute("virsh dumpxml subVmTest1 --inactive | xmllint --xpath '/domain/devices/vsock/cid/@address' -").strip()
+            virsh_output_offline_address = self.getDomainXpathValue(vmName, '/domain/devices/vsock/cid/@address', inactive=True)
             if expected_address_offline:
                 self.assertEqual(virsh_output_offline_address, f'address="{expected_address_offline}"')
 
             if reboot_machine:
-                # Check that after rebooting machine, live VM config will have new vsock condiguration
+                # Check that after rebooting machine, live VM config will have new vsock configuration
                 self.performAction("subVmTest1", "forceOff")
                 b.click("#vm-subVmTest1-system-run")
                 b.wait_in_text("#vm-subVmTest1-system-state", "Running")
 
                 expected_after_reboot_auto = "yes" if new_auto else "no"
-                virsh_output_auto = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/vsock/cid/@auto' -").strip()
+                virsh_output_auto = self.getDomainXpathValue(vmName, '/domain/devices/vsock/cid/@auto')
                 self.assertEqual(virsh_output_auto, f'auto="{expected_after_reboot_auto}"')
 
                 expected_after_reboot_address = new_address if new_address else default_libvirt_vsock_address
                 b.wait_in_text("#vm-subVmTest1-vsock-address", expected_after_reboot_address)
-                virsh_output_address = m.execute("virsh dumpxml subVmTest1 | xmllint --xpath '/domain/devices/vsock/cid/@address' -").strip()
+                virsh_output_address = self.getDomainXpathValue(vmName, '/domain/devices/vsock/cid/@address')
                 self.assertEqual(virsh_output_address, f'address="{expected_after_reboot_address}"')
 
         def removeVsockDevice(live=True):
@@ -881,7 +893,8 @@ class TestMachinesSettings(machineslib.VirtualMachinesCase):
         # Have a canary here which will let us know once this is no longer true
         m.execute("virt-xml subVmTest1 --add-device --vsock cid.auto=yes")
         # Attaching second vsock is expected to fail
-        self.assertRaises(subprocess.CalledProcessError, m.execute, "virt-xml subVmTest1 --add-device --vsock cid.auto=no,cid.address=8")
+        self.assertRaises(subprocess.CalledProcessError, m.execute,
+                          "virt-xml subVmTest1 --add-device --vsock cid.auto=no,cid.address=8")
         m.execute("virt-xml subVmTest1 --remove-device --vsock 1")
 
         # Test configuring vsock for shutoff VM

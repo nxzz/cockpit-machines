@@ -39,7 +39,7 @@ export class StoragePoolList extends React.Component {
     }
 
     render() {
-        const { storagePools, loggedUser, vms, onAddErrorNotification, libvirtVersion } = this.props;
+        const { storagePools, loggedUser, vms, libvirtVersion } = this.props;
         const sortFunction = (storagePoolA, storagePoolB) => storagePoolA.name.localeCompare(storagePoolB.name);
         const actions = (<CreateStoragePoolAction loggedUser={loggedUser} libvirtVersion={libvirtVersion} />);
 
@@ -69,7 +69,7 @@ export class StoragePoolList extends React.Component {
                                                   { title: _("Size"), props: { width: 40 } },
                                                   { title: _("Connection"), props: { width: 15 } },
                                                   { title: _("State"), props: { width: 15 } },
-                                                  { title: "", props: { width: 15 } },
+                                                  { title: "", props: { width: 15, "aria-label": _("Actions") } },
                                               ]}
                                               emptyCaption={_("No storage pool is defined on this host")}
                                               rows={storagePools
@@ -77,7 +77,7 @@ export class StoragePoolList extends React.Component {
                                                       .map(storagePool => {
                                                           const filterVmsByConnection = vms.filter(vm => vm.connectionName == storagePool.connectionName);
 
-                                                          return getStoragePoolRow({ storagePool, vms: filterVmsByConnection, onAddErrorNotification });
+                                                          return getStoragePoolRow({ storagePool, vms: filterVmsByConnection });
                                                       })
                                               }
                                 />
@@ -92,6 +92,5 @@ export class StoragePoolList extends React.Component {
 StoragePoolList.propTypes = {
     storagePools: PropTypes.array.isRequired,
     vms: PropTypes.array.isRequired,
-    onAddErrorNotification: PropTypes.func.isRequired,
     libvirtVersion: PropTypes.number,
 };

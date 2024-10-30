@@ -64,7 +64,8 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
         m.execute("virsh vol-create-as myPoolTwo VolumeTwo --capacity 1G --format qcow2")
         m.execute("virsh vol-create-as myPoolTwo VolumeThree --capacity 1G --format qcow2")
         m.execute("virsh vol-create-as myPoolTwo VolumeFour --capacity 1G --format qcow2")
-        testlib.wait(lambda: all(volume in m.execute("virsh vol-list myPoolTwo") for volume in ["VolumeOne", "VolumeTwo", "VolumeThree", "VolumeFour"]))
+        testlib.wait(lambda: all(volume in m.execute("virsh vol-list myPoolTwo")
+                                 for volume in ["VolumeOne", "VolumeTwo", "VolumeThree", "VolumeFour"]))
         m.execute('virsh pool-refresh myPoolOne; virsh pool-refresh myPoolTwo')
 
         connectionName = m.execute("virsh uri | head -1 | cut -d/ -f4").strip()
@@ -116,7 +117,6 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
         # Expand row for second storage pool and check list of storage volumes
         self.togglePoolRow("myPoolTwo", connectionName)
         self.gotoVolumesTab("myPoolTwo")
-        b.wait_visible(f"#pool-myPoolTwo-{connectionName}-volume-VolumeOne-name")
         b.wait_in_text(f"#pool-myPoolTwo-{connectionName}-volume-VolumeOne-name", "VolumeOne")
         b.wait_in_text(f"#pool-myPoolTwo-{connectionName}-volume-VolumeTwo-name", "VolumeTwo")
         b.wait_in_text(f"#pool-myPoolTwo-{connectionName}-volume-VolumeThree-name", "VolumeThree")
@@ -164,7 +164,8 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
         # Try deactivating and activating a pool
         b.click(f"#deactivate-pool-myPoolOne-{connectionName}")
         b.wait_in_text(f"#pool-myPoolOne-{connectionName}-state", "inactive")
-        b.wait_in_text(f"tr[data-row-id='pool-myPoolOne-{connectionName}'] + tr .pf-v5-c-empty-state", "Activate the storage pool to administer volumes")
+        b.wait_in_text(f"tr[data-row-id='pool-myPoolOne-{connectionName}'] + tr .pf-v5-c-empty-state",
+                       "Activate the storage pool to administer volumes")
         b.wait_visible(f'#myPoolOne-{connectionName}-create-volume-button:disabled')
         b.click(f"#activate-pool-myPoolOne-{connectionName}")
         b.wait_in_text(f"#pool-myPoolOne-{connectionName}-state", "active")
@@ -182,13 +183,14 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
         self.togglePoolRow("myPoolTwo", connectionName)
         self.gotoVolumesTab("myPoolTwo")
 
-        b.wait_visible(f"#pool-myPoolTwo-{connectionName}-volume-VolumeOne-usedby")
         b.wait_in_text(f"#pool-myPoolTwo-{connectionName}-volume-VolumeOne-usedby", "subVmTest1")
 
         # Detach disk from VM
         self.goToMainPage()
         self.waitVmRow("subVmTest1")
         self.goToVmPage("subVmTest1")
+        self.waitDisks(["vda", "vdc"])
+
         self.deleteDisk("vdc")
         self.goToMainPage()
         b.click(".pf-v5-c-card .pf-v5-c-card__header button:contains(Storage pools)")
@@ -429,7 +431,7 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
         dev = self.add_ram_disk(2)
         m.execute(f"parted {dev} mklabel gpt")
 
-        if m.image == "arch":
+        if m.image == "arch" or m.image == "opensuse-tumbleweed":
             m.execute("mkdir -p /media/")
 
         StoragePoolCreateDialog(
@@ -456,8 +458,8 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
                 source={"host": "127.0.0.1", "source_path": target_iqn}
             ).execute()
 
-            if "debian" not in m.image and "ubuntu" not in m.image and "rhel-9" not in m.image and "centos-9" not in m.image:
-                # iscsi-direct pool type is not available in Debian/Ubuntu (https://bugs.debian.org/918728)
+            if "debian" not in m.image and "ubuntu" not in m.image and "rhel" not in m.image and "centos" not in m.image:
+                # iscsi-direct pool type is not available in RHEL and Debian/Ubuntu (https://bugs.debian.org/918728)
                 StoragePoolCreateDialog(
                     self,
                     name="my_iscsi_direct_pool",
@@ -477,7 +479,7 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
                 b.wait_not_present("#create-storage-pool-dialog")
 
         # Prepare a Volume Group to be used as source for the LVM pool
-        m.execute(f"wipefs -a {dev}; pvcreate {dev}; vgcreate vol_grp1 {dev}")
+        m.execute(f"wipefs -a {dev}; until pvcreate {dev}; do sleep .5; done; vgcreate vol_grp1 {dev}")
         b.go("/machines#/storages")
         b.enter_page("/machines")
 
@@ -516,9 +518,11 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
         self.restore_file("/etc/exports")
         m.execute(f"mkdir {nfs_pool} {mnt_exports}")
         m.write("/etc/exports", f"{mnt_exports} 127.0.0.1/24(rw,sync,no_root_squash,no_subtree_check,fsid=0)")
-        m.execute("systemctl restart nfs-server")
-        m.execute(f"virsh pool-define-as nfs-pool --type netfs --target {nfs_pool} --source-host 127.0.0.1 --source-path {mnt_exports}")
-        m.execute("virsh pool-start nfs-pool")
+        m.execute(f"""
+        systemctl restart nfs-server
+        virsh pool-define-as nfs-pool --type netfs --target {nfs_pool} --source-host 127.0.0.1 --source-path {mnt_exports}
+        virsh pool-start nfs-pool
+        """)
 
         # Prepare disk/block pool
         dev = self.add_ram_disk(10)
@@ -598,7 +602,8 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
                     b.wait_not_present("#create-volume-dialog-modal")
                 else:
                     for xfo in self.xfail_objects:
-                        b.wait_in_text(f"#create-volume-dialog-{xfo}-group .pf-v5-c-form__helper-text .pf-m-error", self.xfail_error)
+                        b.wait_in_text(f"#create-volume-dialog-{xfo}-group .pf-v5-c-form__helper-text .pf-m-error",
+                                       self.xfail_error)
 
             def verify(self):
                 # Check that the defined volume is now visible
@@ -698,7 +703,7 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
         ).execute()
 
         # create disk for lvm-pool
-        m.execute(f"wipefs -a {dev}; pvcreate {dev}; vgcreate vol_grp1 {dev}")
+        m.execute(f"wipefs -a {dev}; until pvcreate {dev}; do sleep .5; done; vgcreate vol_grp1 {dev}")
         m.execute("virsh pool-define-as lvm-pool --type logical --source-name vol_grp1; virsh pool-start lvm-pool")
 
         StorageVolumeCreateDialog(
@@ -737,7 +742,7 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
             append=True)
         m.execute("systemctl restart nfs-server")
 
-        # Physcial disk device
+        # Physical disk device
         dev = self.add_ram_disk(2)
         target_path = os.path.join(self.vm_tmpdir, "mnt")
         # Create mount path and parted the physical disk device
@@ -1024,6 +1029,7 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
         # iscsi pool deletion
         # TODO: Arch image has no iscsi yet
         if "debian" not in m.image and "arch" not in m.image:
+            xfail_error = "this function is not supported by the connection driver: storage pool does not support vol deletion"
             StoragePoolsCreationAndDeletion(self,
                                             name="iscsi-pool-1",
                                             pool_type="iscsi",
@@ -1032,7 +1038,7 @@ class TestMachinesStoragePools(machineslib.VirtualMachinesCase):
                                             activate=True,
                                             remove_volume=True,
                                             xfail=True,
-                                            xfail_error="this function is not supported by the connection driver: storage pool does not support vol deletion").execute()
+                                            xfail_error=xfail_error).execute()
 
             StoragePoolsCreationAndDeletion(self,
                                             name="iscsi-pool-2",

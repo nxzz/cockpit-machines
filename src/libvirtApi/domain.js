@@ -125,7 +125,6 @@ export function domainAttachDisk({
     format,
     target,
     vmId,
-    vmName,
     permanent,
     hotplug,
     cacheMode,
@@ -356,7 +355,7 @@ export async function domainCreate({
     }
 }
 
-export function domainCreateFilesystem({ connectionName, objPath, vmName, source, target, xattr }) {
+export function domainCreateFilesystem({ connectionName, vmName, source, target, xattr }) {
     const options = { err: "message" };
     if (connectionName === "system")
         options.superuser = "try";
@@ -480,7 +479,6 @@ export function domainDesktopConsole({
 }
 
 export async function domainDetachDisk({
-    name,
     connectionName,
     id: vmPath,
     target,
@@ -892,9 +890,35 @@ export function domainSendNMI({
     return call(connectionName, objPath, 'org.libvirt.Domain', 'InjectNMI', [0], { timeout, type: 'u' });
 }
 
+function shlex_quote(str) {
+    // yay, command line apis...
+    return "'" + str.replaceAll("'", "'\"'\"'") + "'";
+}
+
+async function domainSetXML(vm, option, values) {
+    const opts = { err: "message" };
+    if (vm.connectionName === 'system')
+        opts.superuser = 'try';
+
+    // We don't pass the arguments for virt-xml through a shell, but
+    // virt-xml does its own parsing with the Python shlex module. So
+    // we need to do the equivalent of shlex.quote here.
+
+    const args = [];
+    for (const key in values)
+        args.push(shlex_quote(key + '=' + values[key]));
+
+    await cockpit.spawn([
+        'virt-xml', '-c', `qemu:///${vm.connectionName}`, '--' + option, args.join(','), vm.uuid, '--edit'
+    ], opts);
+}
+
+export async function domainSetDescription(vm, description) {
+    await domainSetXML(vm, "metadata", { description });
+}
+
 export function domainSetCpuMode({
     name,
-    id: objPath,
     connectionName,
     mode,
     model,
@@ -976,7 +1000,6 @@ export function domainSetVCPUSettings ({
     sockets,
     cores,
     threads,
-    isRunning
 }) {
     const opts = { err: "message", environ: ['LC_ALL=C.UTF-8'] };
     if (connectionName === 'system')

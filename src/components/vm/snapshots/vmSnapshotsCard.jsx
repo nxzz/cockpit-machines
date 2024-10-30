@@ -16,17 +16,21 @@
  * You should have received a copy of the GNU Lesser General Public License
  * along with Cockpit; If not, see <http://www.gnu.org/licenses/>.
  */
+
 import React from 'react';
 
-import cockpit from 'cockpit';
-import { useDialogs, DialogsContext } from 'dialogs.jsx';
-import { vmId, localize_datetime, vmSupportsExternalSnapshots } from "../../../helpers.js";
-import { CreateSnapshotModal } from "./vmSnapshotsCreateModal.jsx";
-import { ListingTable } from "cockpit-components-table.jsx";
 import { Button } from "@patternfly/react-core/dist/esm/components/Button";
 import { Tooltip } from "@patternfly/react-core/dist/esm/components/Tooltip";
 import { Flex, FlexItem } from "@patternfly/react-core/dist/esm/layouts/Flex";
 import { CheckIcon, InfoAltIcon } from '@patternfly/react-icons';
+
+import cockpit from 'cockpit';
+import { useDialogs, DialogsContext } from 'dialogs.jsx';
+import * as timeformat from 'timeformat';
+import { ListingTable } from "cockpit-components-table.jsx";
+
+import { vmId, vmSupportsExternalSnapshots, vmHasVFIOHostDevs } from "../../../helpers.js";
+import { CreateSnapshotModal } from "./vmSnapshotsCreateModal.jsx";
 import { DeleteResourceButton } from '../../common/deleteResource.jsx';
 import { RevertSnapshotModal } from './vmSnapshotsRevertModal.jsx';
 import { snapshotDelete, snapshotGetAll } from '../../../libvirtApi/snapshot.js';
@@ -40,7 +44,7 @@ export const VmSnapshotsActions = ({ vm, config, storagePools }) => {
     const Dialogs = useDialogs();
     const id = vmId(vm.name);
 
-    const isExternal = vmSupportsExternalSnapshots(config, vm, storagePools);
+    const isExternal = vmSupportsExternalSnapshots(config, vm);
 
     function open() {
         Dialogs.show(<CreateSnapshotModal idPrefix={`${id}-create-snapshot`}
@@ -49,11 +53,20 @@ export const VmSnapshotsActions = ({ vm, config, storagePools }) => {
                                           vm={vm} />);
     }
 
-    return (
-        <Button id={`${id}-add-snapshot-button`} variant="secondary" onClick={open}>
+    let excuse = null;
+    if (vm.state != 'shut off' && vmHasVFIOHostDevs(vm))
+        excuse = _("Creating snapshots of VMs with VFIO devices is not supported while they are running.");
+
+    const button = (
+        <Button id={`${id}-add-snapshot-button`}
+                variant="secondary"
+                onClick={open}
+                isAriaDisabled={!!excuse}>
             {_("Create snapshot")}
         </Button>
     );
+
+    return excuse ? <Tooltip content={excuse}>{button}</Tooltip> : button;
 };
 
 export class VmSnapshotsCard extends React.Component {
@@ -73,11 +86,12 @@ export class VmSnapshotsCard extends React.Component {
             {
                 name: _("Creation time"),
                 value: (snap, snapId) => {
-                    const date = localize_datetime(snap.creationTime * 1000);
+                    const dateRel = timeformat.distanceToNow(snap.creationTime * 1000);
+                    const dateAbs = timeformat.dateTimeSeconds(snap.creationTime * 1000);
                     return (
                         <Flex className="snap-creation-time">
                             <FlexItem id={`${id}-snapshot-${snapId}-date`} spacer={{ default: 'spacerSm' }}>
-                                {date}
+                                <Tooltip content={dateAbs}><span>{dateRel}</span></Tooltip>
                             </FlexItem>
                             { snap.isCurrent && <FlexItem><Tooltip content={_("Current")}>
                                 <CheckIcon id={`${id}-snapshot-${snapId}-current`} />
@@ -159,6 +173,7 @@ export class VmSnapshotsCard extends React.Component {
             },
             {
                 name: "",
+                aria: _("Actions"),
                 value: (snap, snapId) => {
                     const revertSnapshotHelper = () => {
                         const revertDialogProps = {
@@ -210,7 +225,10 @@ export class VmSnapshotsCard extends React.Component {
 
         detailMap = detailMap.filter(d => !d.hidden);
 
-        const columnTitles = detailMap.map(target => ({ title: target.name, props: { width: 15 } }));
+        const columnTitles = detailMap.map(target => ({
+            title: target.name,
+            props: { width: 15, "aria-label": target.aria }
+        }));
         let rows = [];
         if (vm.snapshots) {
             rows = vm.snapshots.sort((a, b) => ((b.creationTime - a.creationTime) || (a.name.localeCompare(b.name)))).map((target, snapId) => {

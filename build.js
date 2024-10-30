@@ -3,9 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import process from 'node:process';
 
 import copy from 'esbuild-plugin-copy';
-import { replace } from 'esbuild-plugin-replace';
 
 import { cockpitCompressPlugin } from './pkg/lib/esbuild-compress-plugin.js';
 import { cockpitPoEsbuildPlugin } from './pkg/lib/cockpit-po-plugin.js';
@@ -27,6 +27,7 @@ const packageJson = JSON.parse(fs.readFileSync('package.json'));
 const parser = (await import('argparse')).default.ArgumentParser();
 parser.add_argument('-r', '--rsync', { help: "rsync bundles to ssh target after build", metavar: "HOST" });
 parser.add_argument('-w', '--watch', { action: 'store_true', help: "Enable watch mode", default: process.env.ESBUILD_WATCH === "true" });
+parser.add_argument('-m', '--metafile', { help: "Enable bundle size information file", metavar: "FILE" });
 const args = parser.parse_args();
 
 if (args.rsync)
@@ -56,8 +57,7 @@ function watch_dirs(dir, on_change) {
     const callback = (ev, dir, fname) => {
         // only listen for "change" events, as renames are noisy
         // ignore hidden files and the "4913" temporary file created by vim
-        const isHidden = /^\./.test(fname);
-        if (ev !== "change" || isHidden || fname === "4913")
+        if (ev !== "change" || fname.startsWith('.') || fname === "4913")
             return;
         on_change(path.join(dir, fname));
     };
@@ -83,7 +83,9 @@ const context = await esbuild.context({
     loader: {
         ".js": "jsx",
         ".py": "text",
+        ".sh": "text",
     },
+    metafile: !!args.metafile,
     minify: production,
     nodePaths,
     outdir,
@@ -98,15 +100,6 @@ const context = await esbuild.context({
                 { from: ['./src/index.html'], to: ['./index.html'] },
             ]
         }),
-        // TODO: The following HACKS are needed for ip module - replace this module with one better maintained
-        // The replacement is done as ip module imports `os` which is not in our dependencies, but since we don't use
-        // the functions using the `os` module, we can just replace it with an empty object
-        replace({
-            include: /ip.js/,
-            values: {
-                "var os": 'var os = {}; // HACK: os is not really used in our used functions from ip.js',
-            }
-        }),
         ...esbuildStylesPlugins,
         cockpitPoEsbuildPlugin(),
 
@@ -118,7 +111,10 @@ const context = await esbuild.context({
 });
 
 try {
-    await context.rebuild();
+    const result = await context.rebuild();
+    if (args.metafile) {
+        fs.writeFileSync(args.metafile, JSON.stringify(result.metafile));
+    }
 } catch (e) {
     if (!args.watch)
         process.exit(1);

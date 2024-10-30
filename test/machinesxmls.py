@@ -56,6 +56,17 @@ TEST_NETWORK2_XML = """
 </network>
 """
 
+TEST_NETWORK2_CLASH_XML = """
+<network>
+  <name>test_network2_clash</name>
+  <ip address='192.168.100.1' netmask='255.255.255.0'>
+    <dhcp>
+      <range start='192.168.100.128' end='192.168.100.170'/>
+    </dhcp>
+  </ip>
+</network>
+"""
+
 TEST_NETWORK3_XML = """
 <network>
   <name>test_network3</name>
@@ -100,7 +111,7 @@ NETWORK_XML_PXE = """<network>
   <bridge name='virbr0' stp='on' delay='0'/>
   <mac address='52:54:00:53:7d:8e'/>
   <ip address='192.168.122.1' netmask='255.255.255.0'>
-    <tftp root='/var/lib/libvirt/pxe-config'/>
+    <tftp root='/var/lib/libvirt/dnsmasq'/>
     <dhcp>
       <range start='192.168.122.2' end='192.168.122.254'/>
       <bootp file='pxe.cfg'/>

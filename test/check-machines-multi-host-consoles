@@ -32,7 +32,7 @@ class TestMultiMachineVNC(VirtualMachinesCase):
     """
 
     provision = {  # noqa: RUF012
-        "machine1": {"address": "10.111.113.1/20", "memory_mb": 660},
+        "machine1": {"address": "10.111.113.1/20", "memory_mb": 1024},
         "machine2": {"address": "10.111.113.2/20", "memory_mb": 660},
     }
 
@@ -42,6 +42,7 @@ class TestMultiMachineVNC(VirtualMachinesCase):
         self.machine2 = self.machines['machine2']
 
         self.setup_ssh_auth()
+        self.enable_multihost(self.machine1)
 
     def testBasic(self):
         b = self.browser
@@ -51,6 +52,9 @@ class TestMultiMachineVNC(VirtualMachinesCase):
 
         m.execute(f"ssh-keyscan {m2_host} > /etc/ssh/ssh_known_hosts")
         self.startLibvirt(m2)
+
+        # uses too much RAM with lots of violations
+        m.execute("systemctl mask setroubleshootd.service")
 
         # Start a VM with a VNC on machine1
         name = "subVmTest1"
@@ -63,7 +67,7 @@ class TestMultiMachineVNC(VirtualMachinesCase):
         self.goToVmPage(name)
         b.wait_in_text(f"#vm-{name}-system-state", "Running")
 
-        self.add_machine(m2_host, known_host=True, password=None)
+        b.add_machine(m2_host, known_host=True, password=None)
 
         b.switch_to_top()
         b.click("#hosts-sel button")

@@ -92,11 +92,14 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         m.execute("virsh vol-create-as myPoolOne mydisk2 --capacity 100M --format raw")
         m.execute("virsh vol-create-as myPoolOne mydisk3 --capacity 100M --format qcow2")
         m.execute("virsh vol-create-as myPoolOne mydisk4 --capacity 100M --format qcow2")
-        testlib.wait(lambda: all(disk in m.execute("virsh vol-list myPoolOne") for disk in ["mydisk", "mydisk2", "mydisk3", "mydisk4"]))
+        disks = ["mydisk", "mydisk2", "mydisk3", "mydisk4"]
+        testlib.wait(lambda: all(disk in m.execute("virsh vol-list myPoolOne") for disk in disks))
 
-        m.execute(f"virsh attach-disk --domain subVmTest1 --source {p1}/mydisk --target vde --targetbus virtio --persistent")
-        m.execute(f"virsh attach-disk --domain subVmTest1 --source {p1}/mydisk2 --target vdf --targetbus virtio")
-        m.execute(f"virsh attach-disk --domain subVmTest1 --source {p1}/mydisk3 --target vdg --targetbus virtio --subdriver qcow2 --persistent")
+        m.execute(f"""
+        virsh attach-disk --domain subVmTest1 --source {p1}/mydisk --target vde --targetbus virtio --persistent
+        virsh attach-disk --domain subVmTest1 --source {p1}/mydisk2 --target vdf --targetbus virtio
+        virsh attach-disk --domain subVmTest1 --source {p1}/mydisk3 --target vdg --targetbus virtio --subdriver qcow2 --persistent
+        """)
 
         self.login_and_go("/machines")
         self.waitPageInit()
@@ -104,6 +107,7 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         b.wait_in_text("#vm-subVmTest1-system-state", "Running")
 
         self.goToVmPage("subVmTest1")
+        self.waitDisks(["vda", "vde", "vdf", "vdg"])
 
         # Test non-persistent disks are not configurable
         b.wait_not_present("#vm-subVmTest1-disks-vdf-edit")
@@ -182,6 +186,8 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         m.execute(f"virsh attach-disk --domain subVmTest1 --source {p1}/mydisk4 --target sdb --targetbus sata --persistent")
         b.reload()
         b.enter_page('/machines')
+        # expected devices after bus type change
+        self.waitDisks(["sda", "sdb", "vda", "vdg"])
         openDialog("sdb")
         b.set_checked("#vm-subVmTest1-disks-sdb-edit-readonly", True)
         save("sdb", xfail="readonly sata disks are not supported")
@@ -192,10 +198,16 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
 
         # Virtio bus type should not be shown for CDROM devices
         m.execute("touch /var/lib/libvirt/novell.iso")
-        m.execute("virsh attach-disk --domain subVmTest1 --source /var/lib/libvirt/novell.iso --target hda --type cdrom --targetbus sata --mode readonly --persistent")
+        m.execute("""
+            virsh attach-disk --domain subVmTest1 --source /var/lib/libvirt/novell.iso --target hda \
+                    --type cdrom --targetbus sata --mode readonly --persistent
+        """)
         # virsh attach-disk want send an event for offline VM changes
         b.reload()
         b.enter_page('/machines')
+        # expected devices after bus type change
+        self.waitDisks(["hda", "sdb", "vda", "vdg"])
+
         openDialog("hda")
         b._wait_present("#vm-subVmTest1-disks-hda-edit-bus-type option[value=sata]")
         self.assertFalse(b.is_present("#vm-subVmTest1-disks-hda-edit-bus-type option[value=virtio]"))
@@ -214,6 +226,8 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         openDialog("sda")
         b.wait_visible("#vm-subVmTest1-disks-sda-edit-bus-type:disabled")
         b.wait_visible("#vm-subVmTest1-disks-sda-edit-cache-mode:disabled")
+        b.click("#vm-subVmTest1-disks-sda-edit-dialog button[aria-label='Close']")
+        b.wait_not_present("#vm-subVmTest1-disks-sda-edit-dialog")
 
         # Disks on non-persistent VM cannot be edited
         m.execute("virsh undefine subVmTest1")
@@ -222,6 +236,7 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         self.goToMainPage()
         self.createVm("subVmTest2", running=False, os="unknown")
         self.goToVmPage("subVmTest2")
+        self.waitDisks(["hda"], vm="subVmTest2")
 
         b.wait_in_text("#vm-subVmTest2-disks-hda-bus", "ide")
 
@@ -294,7 +309,7 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         print("Restarting vm-subVmTest1, might take a while")
         self.performAction("subVmTest1", "forceReboot")
 
-        b.wait_visible("#vm-subVmTest1-disks-vda-device")
+        self.waitDisks(["vda"])
         b.wait_not_present("#vm-subVmTest1-disks-vdc-device")
 
         # Check when no storage pool and adding existed disk
@@ -379,9 +394,11 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
             elif self.mode == "use-existing":
                 b.wait_visible(f"#vm-{self.vm_name}-disks-{self.target}-insert-dialog-adddisk-existing-select-pool:enabled")
                 # Choose storage pool
-                b.select_from_dropdown(f"#vm-{self.vm_name}-disks-{self.target}-insert-dialog-adddisk-existing-select-pool", self.pool_name)
+                b.select_from_dropdown(f"#vm-{self.vm_name}-disks-{self.target}-insert-dialog-adddisk-existing-select-pool",
+                                       self.pool_name)
                 # Select from the available volumes
-                b.select_from_dropdown(f"#vm-{self.vm_name}-disks-{self.target}-insert-dialog-adddisk-existing-select-volume", self.volume_name)
+                b.select_from_dropdown(f"#vm-{self.vm_name}-disks-{self.target}-insert-dialog-adddisk-existing-select-volume",
+                                       self.volume_name)
 
             return self
 
@@ -459,7 +476,8 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
             # https://piware.de/2013/09/how-to-watch-system-d-bus-method-calls/
             m.write("/usr/share/dbus-1/system-local.conf", SYSTEM_LOCAL_CONF)
             # Setup dbus monitor to watch for disk ejection call
-            m.spawn("dbus-monitor --system \"interface='org.libvirt.Domain',member='UpdateDevice'\" > /tmp/dbus_monitor_logs", "dbusmonitor")
+            m.spawn(
+            "dbus-monitor --system \"interface='org.libvirt.Domain',member='UpdateDevice'\" > /tmp/dbus_monitor_logs", "dbusmonitor")
 
             # Force eject the disc
             b.click(".pf-v5-c-modal-box__footer button:contains(Force eject)")
@@ -613,7 +631,8 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
                 if self.volume_format:
                     b.select_from_dropdown(f"#vm-{self.vm_name}-disks-adddisk-new-format", self.volume_format)
                 else:
-                    b.wait_val(f"#vm-{self.vm_name}-disks-adddisk-new-format", self.getExpectedFormat(self.pool_type, self.expected_volume_format))
+                    b.wait_val(f"#vm-{self.vm_name}-disks-adddisk-new-format",
+                               self.getExpectedFormat(self.pool_type, self.expected_volume_format))
             elif self.mode == "custom-path":
                 b.wait_visible(f"#vm-{self.vm_name}-disks-adddisk-file")
                 # Type in file path
@@ -631,8 +650,12 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
                 b.select_from_dropdown(f"#vm-{self.vm_name}-disks-adddisk-existing-select-volume", self.volume_name)
 
             # Configure persistency - by default the check box is checked
-            if not self.permanent:
-                b.set_checked(f"#vm-{self.vm_name}-disks-adddisk-permanent", False)
+            if self.persistent_vm:
+                if not self.permanent:
+                    b.set_checked(f"#vm-{self.vm_name}-disks-adddisk-permanent", False)
+            else:
+                # checkbox not shown at all for transient VM
+                b.wait_not_present(f"#vm-{self.vm_name}-disks-adddisk-permanent")
 
             # Check non-persistent VM cannot have permanent disk attached
             if not self.persistent_vm:
@@ -682,8 +705,8 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
 
         def verify_disk_added(self):
             def _get_disk_prop(target, vm_name, prop):
-                x_path = f"/domain/devices/disk[target/@dev='{target}']/{prop}"
-                return m.execute(f"virsh dumpxml {self.vm_name} | xmllint --xpath \"{x_path}\" -").strip()
+                x_path = f'/domain/devices/disk[target/@dev="{target}"]/{prop}'
+                return self.test_obj.getDomainXpathValue(self.vm_name, x_path)
 
             b = self.test_obj.browser
             m = self.test_obj.machine
@@ -709,7 +732,8 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
                 self.test_obj.waitPoolRow(self.pool_name)
                 self.test_obj.togglePoolRow(self.pool_name)
 
-                b.click(f"tr[data-row-id=pool-{self.pool_name}-system] + tr li:contains('Storage volumes') button")  # open the "Storage volumes" subtab
+                # open the "Storage volumes" subtab
+                b.click(f"tr[data-row-id=pool-{self.pool_name}-system] + tr li:contains('Storage volumes') button")
                 b.wait_visible(f"#pool-{self.pool_name}-system-volume-{self.volume_name}-name")
 
                 b.click(".machines-listing-breadcrumb li a:contains(Virtual machines)")
@@ -773,8 +797,10 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         target_iqn = "iqn.2019-09.cockpit.lan"
         self.prepareStorageDeviceOnISCSI(target_iqn)
 
-        m.execute(f"virsh pool-define-as iscsi-pool --type iscsi --target /dev/disk/by-id --source-host 127.0.0.1 --source-dev {target_iqn}")
-        m.execute("virsh pool-start iscsi-pool")
+        m.execute(f"""
+        virsh pool-define-as iscsi-pool --type iscsi --target /dev/disk/by-id --source-host 127.0.0.1 --source-dev {target_iqn}
+        virsh pool-start iscsi-pool
+        """)
         testlib.wait(lambda: "unit:0:0:0" in self.machine.execute("virsh pool-refresh iscsi-pool; virsh vol-list iscsi-pool"), delay=3)
 
         self.addCleanup(self.machine.execute, "virsh pool-destroy iscsi-pool; virsh pool-undefine iscsi-pool")
@@ -813,12 +839,9 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
             mode='use-existing',
         ).execute()
 
-        # Detach the iscsi disk before reaching teardown because shutting of the domains would sometimes hang when iscsi disks are attached
+        # Detach the iscsi disk before reaching teardown because shutting of the domains would sometimes hang when
+        # iscsi disks are attached.
         m.execute("virsh detach-disk subVmTest1 --target vdb")
-
-        # AppArmor doesn't like the non-standard path for our storage pools
-        if m.image in ["debian-testing"]:
-            self.allow_journal_messages(f'.* type=1400 .* apparmor="DENIED" operation="open" profile="libvirt.* name="{self.vm_tmpdir}.*')
 
     def testAddDiskNFS(self):
         b = self.browser
@@ -834,9 +857,11 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         mnt_exports = os.path.join(self.vm_tmpdir, "mnt_exports")
         m.execute(f"mkdir {nfs_pool} {mnt_exports}")
         m.write("/etc/exports", f"{mnt_exports} 127.0.0.1/24(rw,sync,no_root_squash,no_subtree_check,fsid=0)")
-        m.execute("systemctl restart nfs-server")
-        m.execute(f"virsh pool-define-as nfs-pool --type netfs --target {nfs_pool} --source-host 127.0.0.1 --source-path {mnt_exports}")
-        m.execute("virsh pool-start nfs-pool")
+        m.execute(f"""
+        systemctl restart nfs-server
+        virsh pool-define-as nfs-pool --type netfs --target {nfs_pool} --source-host 127.0.0.1 --source-path {mnt_exports}
+        virsh pool-start nfs-pool
+        """)
         # And create a volume on it in order to test use existing volume dialog
         m.execute("virsh vol-create-as --pool nfs-pool --name nfs-volume-0 --capacity 1M --format qcow2")
 
@@ -871,10 +896,6 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
             volume_size_unit='MiB',
             expected_target=get_next_free_target(used_targets)[-1],
         ).execute()
-
-        # AppArmor doesn't like the non-standard path for our storage pools
-        if m.image in ["debian-testing"]:
-            self.allow_journal_messages(f'.* type=1400 .* apparmor="DENIED" operation="open" profile="libvirt.* name="{self.vm_tmpdir}.*')
 
     def testAddDiskPool(self):
         b = self.browser
@@ -958,15 +979,12 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         # First select some iso file, where disk type is set to "cdrom"
         b.select_from_dropdown("#vm-subVmTest1-disks-adddisk-existing-select-pool", "images")
         b.select_from_dropdown("#vm-subVmTest1-disks-adddisk-existing-select-volume", "defaultVol.iso")
-        # Then choose a different storage pool without selecting the volume (let UI automatically select the first volume from loop-disk storage pool)
+        # Then choose a different storage pool without selecting the volume
+        # (let UI automatically select the first volume from loop-disk storage pool)
         # This tests that type of disk automatically resets back to default "disk"
         b.select_from_dropdown("#vm-subVmTest1-disks-adddisk-existing-select-pool", "loop-disk")
         # Check that newly attached disk is indeed of type "disk"
         dialog.add_disk().verify_disk_added()
-
-        # AppArmor doesn't like the non-standard path for our storage pools
-        if m.image in ["debian-testing"]:
-            self.allow_journal_messages(f'.* type=1400 .* apparmor="DENIED" operation="open" profile="libvirt.* name="{self.vm_tmpdir}.*')
 
     @testlib.timeout(900)
     def testAddDiskDirPool(self):
@@ -1044,8 +1062,7 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
             release_target(used_targets, target)
 
         permanent_targets = [t for t in used_targets if t not in transient_targets]
-        for target in permanent_targets:
-            b.wait_visible(f"#vm-subVmTest1-disks-{target}-device")
+        self.waitDisks(permanent_targets)
 
         # Check that creating a new volume in default_tmp does not by
         # accident use the defaults from defaultVol.iso.  Those
@@ -1099,7 +1116,9 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
             b.click("#vm-subVmTest1-system-run")
             b.wait_in_text("#vm-subVmTest1-system-state", "Running")
             # Test disk attachment to non-persistent VM
+            b.wait_visible(".vm-top-panel[data-vm-transient=false]")
             m.execute("virsh undefine subVmTest1")
+            b.wait_visible(".vm-top-panel[data-vm-transient=true]")
             self.VMAddDiskDialog(
                 self,
                 pool_name='myPoolOne',
@@ -1130,10 +1149,6 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         self.waitPageInit()
         # Check that usage information can't be fetched since the pool is inactive
         b.wait_not_present(f"#vm-subVmTest1-disks-{pool_disk}-used")
-
-        # AppArmor doesn't like the non-standard path for our storage pools
-        if m.image in ["debian-testing"]:
-            self.allow_journal_messages(f'.* type=1400 .* apparmor="DENIED" operation="open" profile="libvirt.* name="{self.vm_tmpdir}.*')
 
     def testAddDiskCustomPath(self):
         b = self.browser
@@ -1242,10 +1257,10 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         ).openDialog()
         b.click(f"{prefix}-file .pf-v5-c-select__toggle-button")
         b.wait_visible(f"{prefix}-file-autocomplete")
-        b.key_press(chr(40), use_ord=True)
+        b.key("ArrowDown")
         b.focus(f"{prefix}-file-autocomplete li:first-child")
         for _retry in range(0, 10):
-            b.key_press(chr(40), use_ord=True)
+            b.key("ArrowDown")
             time.sleep(0.5)
         b.click(".pf-v5-c-modal-box__close button")
         b.wait_not_present(".pf-v5-c-modal-box")
@@ -1513,6 +1528,7 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         # Test detaching non permanent disk of a running domain
         b.wait_in_text("#vm-subVmTest1-system-state", "Running")
         self.goToVmPage("subVmTest1")
+        self.waitDisks(["vda", "vdc", "vdd", "vde"])
 
         self.deleteDisk("vdc", expect_path=vdc_path)
         # Wait for underlying VM's OS to detach the disk
@@ -1544,17 +1560,15 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
         m.execute(f"virsh attach-disk --domain subVmTest1 --source {sda_path} --target sda --targetbus sata --persistent")
         m.execute(f"virsh attach-disk --domain subVmTest1 --source {sdb_path} --target sdb --targetbus sata --persistent")
         m.execute(f"virsh attach-disk --domain subVmTest1 --source {sdc_path} --target sdc --targetbus sata --persistent")
-        m.execute("virsh attach-disk --domain subVmTest1 --config --target sdd --type cdrom --source ''")  # attach disk with no file (empty cd-rom)
+        # attach disk with no file (empty cd-rom)
+        m.execute("virsh attach-disk --domain subVmTest1 --config --target sdd --type cdrom --source ''")
         m.execute("virt-xml subVmTest1 --add-device --disk type='block',source.dev='/dev/null',target.dev=sde")
 
         # Need to refresh when attaching disk for shutoff VM
         b.reload()
         b.enter_page('/machines')
         self.waitPageInit()
-        b.wait_visible("#vm-subVmTest1-disks-sda-device")
-        b.wait_visible("#vm-subVmTest1-disks-sdb-device")
-        b.wait_visible("#vm-subVmTest1-disks-sdc-device")
-        b.wait_visible("#vm-subVmTest1-disks-vda-device")
+        self.waitDisks(["sda", "sdb", "sdc", "vda"])
 
         def removeDiskAndChecks(target, path, removeFile=False, removeFileFail=False, removeFileNotPresent=False):
             self.dropdownAction(f"#vm-subVmTest1-disks-{target}-action-kebab",
@@ -1584,7 +1598,6 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
 
             if removeFileFail:
                 # Check Toast notification is present
-                b.wait_visible(".pf-v5-c-alert.pf-m-warning")
                 b.wait_in_text(".pf-v5-c-alert.pf-m-warning .pf-v5-c-alert__title", "Could not delete")
                 # Cleanup Toast notification
                 b.click(".pf-v5-c-alert-group li:first-of-type .pf-v5-c-alert button.pf-m-plain")
@@ -1650,6 +1663,8 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
 
         b.wait_in_text("#vm-subVmTest1-system-state", "Running")
         self.goToVmPage("subVmTest1")
+        # wait until Disks have initialized; otherwise the kebabs jump around
+        self.waitDisks(["sda", "vda"])
 
         self.VMInsertMediaDialog(
             self,
@@ -1678,6 +1693,28 @@ class TestMachinesDisks(machineslib.VirtualMachinesCase):
                 file_path='/var/lib/libvirt/novell.iso',
                 force=True,
             ).execute()
+
+    def testBlockDeviceDisk(self):
+        b = self.browser
+        m = self.machine
+
+        loop_dev = self.add_loopback_disk()
+
+        self.createVm("subVmTest1", running=False)
+        m.execute(f"virt-xml subVmTest1 --add-device --disk source.type=block,source.dev={loop_dev}")
+        m.execute("virsh start subVmTest1")
+
+        self.login_and_go("/machines")
+        self.waitPageInit()
+
+        b.wait_in_text("#vm-subVmTest1-system-state", "Running")
+        self.goToVmPage("subVmTest1")
+
+        b.wait_in_text('#vm-subVmTest1-disks', "Block device")
+        b.wait_text('#vm-subVmTest1-disks-vdb-source-dev', loop_dev)
+
+        if "debian" in m.image or "ubuntu" in m.image:
+            self.allow_journal_messages(f'.* type=1400 .* apparmor="DENIED" operation="open".*profile="virt-aa-helper" name="{loop_dev}".*')  # noqa: E501
 
 
 if __name__ == '__main__':

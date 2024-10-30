@@ -33,9 +33,7 @@ import { HelpIcon } from '@patternfly/react-icons';
 import { CPUModal } from './cpuModal.jsx';
 import MemoryModal from './memoryModal.jsx';
 import {
-    convertToBestUnit,
     rephraseUI,
-    units,
     vmId,
 } from '../../../helpers.js';
 import { updateVm } from '../../../actions/store-actions.js';
@@ -100,7 +98,7 @@ class VmOverviewCard extends React.Component {
     }
 
     render() {
-        const { vm, vms, nodeDevices, libvirtVersion } = this.props;
+        const { vm, vms, libvirtVersion } = this.props;
         const idPrefix = vmId(vm.name);
 
         const autostart = (
@@ -111,12 +109,11 @@ class VmOverviewCard extends React.Component {
                         label={_("Run when host boots")} />
             </DescriptionListDescription>
         );
-        const memory = convertToBestUnit(vm.currentMemory, units.KiB);
         const memoryLink = (
             <DescriptionListDescription id={`${idPrefix}-memory-count`}>
                 <Flex spaceItems={{ default: 'spaceItemsSm' }}>
                     <FlexItem>
-                        {cockpit.format("$0 $1", parseFloat(memory.value).toFixed(1), memory.unit)}
+                        {cockpit.format_bytes(vm.currentMemory * 1024, { base2: true })}
                     </FlexItem>
                     <Button variant="link" isInline isDisabled={!vm.persistent} onClick={this.openMemory}>
                         {_("edit")}
@@ -191,8 +188,7 @@ class VmOverviewCard extends React.Component {
                         <DescriptionListGroup>
                             <DescriptionListTerm>{_("Boot order")}</DescriptionListTerm>
                             <DescriptionListDescription id={`${idPrefix}-boot-order`}>
-                                <BootOrderLink vm={vm} idPrefix={idPrefix}
-                                                   nodeDevices={nodeDevices} />
+                                <BootOrderLink vm={vm} />
                             </DescriptionListDescription>
                         </DescriptionListGroup>
 
@@ -289,7 +285,6 @@ VmOverviewCard.propTypes = {
     vms: PropTypes.array.isRequired,
     config: PropTypes.object.isRequired,
     libvirtVersion: PropTypes.number.isRequired,
-    nodeDevices: PropTypes.array.isRequired,
 };
 
 export default VmOverviewCard;

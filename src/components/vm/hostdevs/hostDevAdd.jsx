@@ -41,7 +41,7 @@ import "./hostDevAdd.scss";
 
 const _ = cockpit.gettext;
 
-const TypeRow = ({ idPrefix, type, setType }) => {
+const TypeRow = ({ type, setType }) => {
     return (
         <FormGroup fieldId="usb_device"
                    label={_("Type")}
@@ -78,7 +78,7 @@ function devicesHaveAChild(selectableDevices) {
     return Object.values(all).sort(a => a.hasChildren ? 1 : -1);
 }
 
-const DevRow = ({ idPrefix, type, selectableDevices, setSelectableDevices }) => {
+const DevRow = ({ idPrefix, selectableDevices, setSelectableDevices }) => {
     function getSource(nodeDev, id) {
         const cells = [];
         if (nodeDev.capability.type === "usb_device") {
@@ -125,7 +125,10 @@ const DevRow = ({ idPrefix, type, selectableDevices, setSelectableDevices }) => 
                    className="vm-device-table"
                    aria-label={_("Table of selectable host devices")}>
                 <Thead>
-                    <Tr><Th />{[_("Product"), _("Vendor"), _("Location")].map(col => <Th key={col}>{col}</Th>)}</Tr>
+                    <Tr>
+                        <Th aria-label={_("Row select")} />
+                        {[_("Product"), _("Vendor"), _("Location")].map(col => <Th key={col}>{col}</Th>)}
+                    </Tr>
                 </Thead>
                 <Tbody>
                     {selectableDevices.map((dev, rowIndex) => {
@@ -214,8 +217,8 @@ const AddHostDev = ({ idPrefix, vm }) => {
 
     const body = (
         <Form isHorizontal>
-            <TypeRow idPrefix={idPrefix} type={type} setType={setTypeWrapper} />
-            <DevRow idPrefix={idPrefix} type={type} selectableDevices={selectableDevices} setSelectableDevices={setSelectableDevices} />
+            <TypeRow type={type} setType={setTypeWrapper} />
+            <DevRow idPrefix={idPrefix} selectableDevices={selectableDevices} setSelectableDevices={setSelectableDevices} />
         </Form>
     );
 

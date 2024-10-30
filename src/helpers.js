@@ -17,9 +17,6 @@
  * along with Cockpit; If not, see <http://www.gnu.org/licenses/>.
  */
 
-import * as dfnlocales from 'date-fns/locale';
-import { formatRelative } from 'date-fns';
-
 import cockpit from 'cockpit';
 import store from './store.js';
 
@@ -39,11 +36,6 @@ export function toReadableNumber(number) {
         const fixed1 = Math.floor(number * 10) / 10;
         return (number - fixed1 === 0) ? Math.floor(number) : fixed1;
     }
-}
-
-export function localize_datetime(time) {
-    const locale = (cockpit.language == "en") ? dfnlocales.enUS : dfnlocales[cockpit.language.replace('_', '')];
-    return formatRelative(time, Date.now(), { locale });
 }
 
 export const diskBusTypes = {
@@ -108,16 +100,11 @@ export function getBestUnit(input, inputUnit) {
     return logUnitMap[getLogarithmOfBase1024(convertToUnitVerbose(input, inputUnit, units.B).value)];
 }
 
-export function convertToBestUnit(input, inputUnit) {
-    return convertToUnitVerbose(input, inputUnit,
-                                logUnitMap[getLogarithmOfBase1024(convertToUnitVerbose(input, inputUnit, units.B).value)]);
-}
-
 export function convertToUnit(input, inputUnit, outputUnit) {
     return convertToUnitVerbose(input, inputUnit, outputUnit).value;
 }
 
-export function convertToUnitVerbose(input, inputUnit, outputUnit) {
+function convertToUnitVerbose(input, inputUnit, outputUnit) {
     const result = {
         value: 0,
         unit: units.B.name,
@@ -329,9 +316,8 @@ export function fileDownload({ data, fileName = 'myFile.dat', mimeType = 'applic
     } else */ { // do iframe dataURL download
         logDebug('fileDownload() is using IFRAME');
         const f = document.createElement('iframe');
-        f.width = '1';
-        f.height = '1';
         document.body.appendChild(f);
+        f.setAttribute("hidden", "hidden");
         const nicerText = '\n[...............................GraphicsConsole]\n';
         f.src = `data:${mimeType},${encodeURIComponent(data + nicerText)}`;
         window.setTimeout(() => document.body.removeChild(f), 333);
@@ -841,7 +827,7 @@ export function getHostDevSourceObject(dev) {
 
         source = { vendor, product, bus, device };
     } else {
-        console.warn(`getHostDevSourceObject: unsupport device type '${dev.type}'`);
+        console.warn(`getHostDevSourceObject: unsupported device type '${dev.type}'`);
     }
 
     return source;
@@ -880,7 +866,7 @@ export function getStoragePoolPath(storagePools, poolName, connectionName) {
     return pool?.target?.path;
 }
 
-export function vmSupportsExternalSnapshots(config, vm, storagePools) {
+export function vmSupportsExternalSnapshots(config, vm) {
     // External snapshot should only be used if the VM's os types/architecture allow it
     // and if snapshot features are present among guest capabilities:
     // https://libvirt.org/formatcaps.html#guest-capabilities
@@ -891,7 +877,7 @@ export function vmSupportsExternalSnapshots(config, vm, storagePools) {
         return false;
     }
 
-    // If at leat one disk has internal snapshot preference specified, use internal snapshot for all disk,
+    // If at least one disk has internal snapshot preference specified, use internal snapshot for all disk,
     // as mixing internal and external is not allowed
     const disks = Object.values(vm.disks);
     if (disks.some(disk => disk.snapshot === "internal")) {
@@ -899,11 +885,23 @@ export function vmSupportsExternalSnapshots(config, vm, storagePools) {
         return false;
     }
 
-    // Currently external snapshots work only for disks of type "file"
+    // HACK - https://gitlab.com/libvirt/libvirt/-/issues/631
+    //
+    // Currently external snapshots work only for disks of type
+    // "file".  We work around this by making internal snapshots
+    // instead in that case. The workaround here should be removed
+    // when the bug is fixed. Also see:
+    //
+    //     https://github.com/cockpit-project/cockpit-machines/pull/1554
+    //
     if (!disks.every(disk => disk.type === "file")) {
         logDebug(`vmSupportsExternalSnapshots: vm ${vm.name} has unsupported disk type`);
         return false;
     }
 
     return true;
+}
+
+export function vmHasVFIOHostDevs(vm) {
+    return !!vm.hostDevices.find(hd => hd.driver === "vfio");
 }

@@ -3,14 +3,14 @@ PACKAGE_NAME := $(shell awk '/"name":/ {gsub(/[",]/, "", $$2); print $$2}' packa
 RPM_NAME := cockpit-$(PACKAGE_NAME)
 VERSION := $(shell T=$$(git describe 2>/dev/null) || T=1; echo $$T | tr '-' '.')
 ifeq ($(TEST_OS),)
-TEST_OS = fedora-39
+TEST_OS = fedora-40
 endif
 export TEST_OS
 TARFILE=$(RPM_NAME)-$(VERSION).tar.xz
 NODE_CACHE=$(RPM_NAME)-node-$(VERSION).tar.xz
 SPEC=$(RPM_NAME).spec
 PREFIX ?= /usr/local
-APPSTREAMFILE=org.cockpit-project.$(PACKAGE_NAME).metainfo.xml
+APPSTREAMFILE=org.cockpit_project.$(PACKAGE_NAME).metainfo.xml
 VM_IMAGE=$(CURDIR)/test/images/$(TEST_OS)
 # stamp file to check for node_modules/
 NODE_MODULES_TEST=package-lock.json
@@ -41,7 +41,7 @@ COCKPIT_REPO_FILES = \
 	$(NULL)
 
 COCKPIT_REPO_URL = https://github.com/cockpit-project/cockpit.git
-COCKPIT_REPO_COMMIT = 1c93d4b696843ecd3438dcc0ec020979459b5ef1 # 316 + 54 commits
+COCKPIT_REPO_COMMIT = 6b4b96e742206d9f266366e09fc9943d329f03e7 # 327 + 3 commits
 
 $(COCKPIT_REPO_FILES): $(COCKPIT_REPO_STAMP)
 COCKPIT_REPO_TREE = '$(strip $(COCKPIT_REPO_COMMIT))^{tree}'
@@ -57,13 +57,14 @@ $(COCKPIT_REPO_STAMP): Makefile
 LINGUAS=$(basename $(notdir $(wildcard po/*.po)))
 
 po/$(PACKAGE_NAME).js.pot:
-	xgettext --default-domain=$(PACKAGE_NAME) --output=$@ --language=C --keyword= \
+	xgettext --default-domain=$(PACKAGE_NAME) --output=- --language=C --keyword= \
 		--keyword=_:1,1t --keyword=_:1c,2,2t --keyword=C_:1c,2 \
 		--keyword=N_ --keyword=NC_:1c,2 \
 		--keyword=gettext:1,1t --keyword=gettext:1c,2,2t \
 		--keyword=ngettext:1,2,3t --keyword=ngettext:1c,2,3,4t \
 		--keyword=gettextCatalog.getString:1,3c --keyword=gettextCatalog.getPlural:2,3,4c \
-		--from-code=UTF-8 $$(find src/ -name '*.js' -o -name '*.jsx')
+		--from-code=UTF-8 $$(find src/ -name '*.[jt]s' -o -name '*.[jt]sx') | \
+		sed '/^#/ s/, c-format//' > $@
 
 po/$(PACKAGE_NAME).html.pot: $(NODE_MODULES_TEST) $(COCKPIT_REPO_STAMP)
 	pkg/lib/html2po.js -o $@ $$(find src -name '*.html')
@@ -126,12 +127,9 @@ devel-uninstall:
 print-version:
 	@echo "$(VERSION)"
 
-# required for running integration tests; commander and ws are deps of chrome-remote-interface
+# required for running integration tests
 TEST_NPMS = \
-	node_modules/chrome-remote-interface \
-	node_modules/commander \
 	node_modules/sizzle \
-	node_modules/ws \
 	$(NULL)
 
 dist: $(TARFILE)

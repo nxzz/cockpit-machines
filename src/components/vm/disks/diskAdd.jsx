@@ -186,7 +186,7 @@ const AdditionalOptions = ({ cacheMode, device, idPrefix, onValueChanged, busTyp
         const clearedSerial = clearSerial(serial);
 
         if (serial !== clearedSerial) {
-            // Show the message once triggerred and leave it around as reminder
+            // Show the message once triggered and leave it around as reminder
             setShowAllowedCharactersMessage(true);
             onValueChanged('serial', clearedSerial);
         }
@@ -375,7 +375,7 @@ export const AddDiskModalBody = ({ disk, idPrefix, isMediaInsertion, vm, vms, su
         size: 1,
         unit: units.GiB.name,
         volumeName: "",
-        permanent: true,
+        permanent: vm.persistent,
     });
     const [mode, setMode] = useState(isMediaInsertion ? CUSTOM_PATH : CREATE_NEW);
     const [validate, setValidate] = useState(false);
@@ -761,7 +761,6 @@ const AddDiskModalFooter = ({
                 target: diskParams.target,
                 permanent: diskParams.permanent,
                 hotplug,
-                vmName: vm.name,
                 vmId: vm.id,
                 cacheMode: diskParams.cacheMode,
                 busType: diskParams.busType,
@@ -785,7 +784,6 @@ const AddDiskModalFooter = ({
             target: diskParams.target,
             permanent: diskParams.permanent,
             hotplug,
-            vmName: vm.name,
             vmId: vm.id,
             cacheMode: diskParams.cacheMode,
             shareable: volume && volume.format === "raw" && isVolumeUsed[diskParams.existingVolumeName].length > 0,

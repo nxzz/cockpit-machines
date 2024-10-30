@@ -186,7 +186,6 @@ export const CPUModal = ({ vm, maxVcpu, models }) => {
         return domainSetVCPUSettings({
             name: vm.name,
             connectionName: vm.connectionName,
-            isRunning: vm.state == 'running',
             max,
             count,
             sockets,
@@ -200,7 +199,6 @@ export const CPUModal = ({ vm, maxVcpu, models }) => {
         setIsLoading(true);
         domainSetCpuMode({
             name: vm.name,
-            id: vm.id,
             connectionName: vm.connectionName,
             mode: cpuMode,
             model: cpuModel

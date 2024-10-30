@@ -75,6 +75,12 @@ export const VmDetailsPage = ({
                 <VmNeedsShutdown vm={vm} />
                 <VmUsesSpice vm={vm} />
             </div>
+            {
+                vm.inactiveXML.description &&
+                    <div className="vm-description">
+                        {vm.inactiveXML.description.split("\n").map((p, i) => <p key={i}>{p}</p>)}
+                    </div>
+            }
         </PageSection>
     );
 
@@ -118,7 +124,7 @@ export const VmDetailsPage = ({
                                   maxVcpu={vm.capabilities.maxVcpu}
                                   cpuModels={vm.capabilities.cpuModels}
                                   cpuHostModel={vm.capabilities.cpuHostModel}
-                                  nodeDevices={nodeDevices} libvirtVersion={libvirtVersion} />,
+                                  libvirtVersion={libvirtVersion} />,
         },
         {
             id: `${vmId(vm.name)}-usage`,
@@ -208,13 +214,11 @@ export const VmDetailsPage = ({
                     </>
                 ),
                 actions: <VmFilesystemActions connectionName={vm.connectionName}
-                                              objPath={vm.id}
                                               vmName={vm.name}
                                               memory={vm.memory}
                                               vmState={vm.state} />,
                 body: <VmFilesystemsCard connectionName={vm.connectionName}
                                          filesystems={vm.filesystems}
-                                         objPath={vm.id}
                                          vmName={vm.name}
                                          vmState={vm.state} />
             }

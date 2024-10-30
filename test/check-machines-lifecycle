@@ -269,7 +269,7 @@ class TestMachinesLifecycle(machineslib.VirtualMachinesCase):
         self.waitVmRow("subVmTest2")
         self.waitVmRow("subVmTest1", "system", False)
 
-        b.select_PF5("#vm-state-select-toggle", "#vm-state-menu", "Running")
+        b.select_PF("#vm-state-select-toggle", "Running")
         self.waitVmRow("subVmTest1", "system", False)
         self.waitVmRow("subVmTest2")
 
@@ -277,11 +277,11 @@ class TestMachinesLifecycle(machineslib.VirtualMachinesCase):
         self.waitVmRow("subVmTest1", "system", False)
         self.waitVmRow("subVmTest2")
 
-        b.select_PF5("#vm-state-select-toggle", "#vm-state-menu", "Shut off")
+        b.select_PF("#vm-state-select-toggle", "Shut off")
         self.waitVmRow("subVmTest1")
         self.waitVmRow("subVmTest2", "system", False)
 
-        b.select_PF5("#vm-state-select-toggle", "#vm-state-menu", "All")
+        b.select_PF("#vm-state-select-toggle", "All")
         self.waitVmRow("subVmTest1")
         self.waitVmRow("subVmTest2")
 
@@ -355,6 +355,8 @@ class TestMachinesLifecycle(machineslib.VirtualMachinesCase):
         b.set_input_text("#rename-dialog-new-name", "new")
         b.click("#rename-dialog-confirm")
         b.wait_in_text(".pf-v5-c-modal-box__body .pf-v5-c-alert.pf-m-danger", "Can't rename domain to itself")
+        b.click(".pf-v5-c-modal-box button:contains('Cancel')")
+        b.wait_not_present(".pf-v5-c-modal-box")
 
         self.goToVmPage("new")
         self.performAction("new", "rename")
@@ -364,6 +366,27 @@ class TestMachinesLifecycle(machineslib.VirtualMachinesCase):
         b.wait(lambda: "vm?name=test%25&connection=system" in b.eval_js("window.location.href"))
         b.wait_text("h2.vm-name", "test%")
         b.wait_not_present("#navbar-oops")
+
+    def testEditDescription(self):
+        b = self.browser
+
+        self.createVm("mac", running=False)
+        self.login_and_go("/machines")
+        self.waitPageInit()
+        self.goToVmPage("mac")
+
+        self.performAction("mac", "edit-description")
+
+        # Non-ascii chars, unbalanced quotes, backslash, multiple lines
+        desc1 = '"Döscrü\\ptiän \'\'\' كرة القدم'
+        desc2 = 'Second <b>line</b>'
+
+        b.set_input_text("#edit-description-dialog-description", desc1 + "\n" + desc2)
+        b.click("#edit-description-dialog-confirm")
+        b.wait_not_present("#edit-description-dialog-confirm")
+
+        b.wait_text(".vm-description p:nth-child(1)", desc1)
+        b.wait_text(".vm-description p:nth-child(2)", desc2)
 
     def testDelete(self):
         b = self.browser
@@ -507,7 +530,7 @@ class TestMachinesLifecycle(machineslib.VirtualMachinesCase):
         m.execute(f"virsh undefine {name}")
         b.wait_visible(f"tr[data-row-id=vm-{name}-system][data-vm-transient=true]")
         b.click(f"#vm-{name}-system-action-kebab")
-        b.wait_visible(f".pf-m-disabled #vm-{name}-system-delete")  # delete buton should be disabled
+        b.wait_visible(f".pf-m-aria-disabled #vm-{name}-system-delete")  # delete buton should be disabled
         b.click(f"#vm-{name}-system-forceOff")
         b.wait_visible(f"#vm-{name}-system-confirm-action-modal")
         b.click(f".pf-v5-c-modal-box__footer #vm-{name}-system-forceOff")

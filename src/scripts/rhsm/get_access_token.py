@@ -1,6 +1,6 @@
 import json
 import sys
-import urllib.error
+import urllib.parse
 import urllib.request
 
 args = json.loads(sys.argv[1], strict=False)
@@ -24,4 +24,4 @@ try:
 
     print(ret_obj["access_token"])
 except Exception as error:
-    sys.exit(error)
+    sys.exit(str(error))

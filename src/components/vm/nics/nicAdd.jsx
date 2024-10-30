@@ -36,7 +36,7 @@ import './nic.css';
 const _ = cockpit.gettext;
 
 function getRandomMac(vms) {
-    // prevent getting cycled in the unforseen case where all MACs will conflict with existing ones
+    // prevent getting cycled in the unforeseen case where all MACs will conflict with existing ones
     for (let i = 0; i < 42; i++) {
         const parts = ["52", "54", "00"];
         for (let j = 0; j < 3; j++)
@@ -85,7 +85,7 @@ const NetworkMacRow = ({ idPrefix, dialogValues, onValueChanged }) => {
     );
 };
 
-const PermanentChange = ({ idPrefix, onValueChanged, dialogValues, vm }) => {
+const PermanentChange = ({ idPrefix, onValueChanged, dialogValues }) => {
     // By default for a running VM, the iface is attached until shut down only. Enable permanent change of the domain.xml
     return (
         <FormGroup label={_("Persistence")} fieldId={`${idPrefix}-permanent`} hasNoPaddingTop>
@@ -198,8 +198,7 @@ export class AddNIC extends React.Component {
                 {domainIsRunning(vm.state) && vm.persistent &&
                 <PermanentChange idPrefix={idPrefix}
                                  dialogValues={this.state}
-                                 onValueChanged={this.onValueChanged}
-                                 vm={vm} />}
+                                 onValueChanged={this.onValueChanged} />}
             </Form>
         );
 

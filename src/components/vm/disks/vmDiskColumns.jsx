@@ -39,6 +39,7 @@ const _ = cockpit.gettext;
 
 export const DISK_SOURCE_LIST = [
     { name: "file", label: _("File") },
+    { name: "dev", label: _("Block device") },
     { name: "device", label: _("Device") },
     { name: "protocol", label: _("Protocol") },
     { name: "pool", label: _("Pool") },
@@ -83,7 +84,7 @@ DiskSourceCell.propTypes = {
     idPrefix: PropTypes.string.isRequired,
 };
 
-export const DiskExtras = ({ idPrefix, cache, type, io, discard, serial, errorPolicy }) => {
+export const DiskExtras = ({ idPrefix, cache, type, serial }) => {
     const addOptional = (chunks, value, type, descr) => {
         if (value) {
             chunks.push(
@@ -109,9 +110,8 @@ export const DiskExtras = ({ idPrefix, cache, type, io, discard, serial, errorPo
 
 DiskExtras.propTypes = {
     cache: PropTypes.string,
-    io: PropTypes.string,
-    discard: PropTypes.string,
-    errorPolicy: PropTypes.string,
+    serial: PropTypes.string,
+    type: PropTypes.string,
     idPrefix: PropTypes.string.isRequired,
 };
 
@@ -120,7 +120,6 @@ export const RemoveDiskModal = ({ vm, disk, storagePools, onAddErrorNotification
         return domainDetachDisk({
             connectionName: vm.connectionName,
             id: vm.id,
-            name: vm.name,
             target: disk.target,
             live: vm.state === 'running',
             persistent: vm.persistent,
