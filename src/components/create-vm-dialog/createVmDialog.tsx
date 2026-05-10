@@ -990,7 +990,7 @@ const CloudInitOptionsRow = ({
                               value={cloudInitUserData || ""}
                               validated={validationFailed.cloudInitUserData ? "error" : "default"}
                               onChange={(_, value) => onValueChanged("cloudInitUserData", value)}
-                              placeholder={"#cloud-config\nhostname: my-vm\n..."}
+                              placeholder={_("#cloud-config\nhostname: my-vm\n...")}
                               rows={12} />
                     <FormHelper helperTextInvalid={validationFailed.cloudInitUserData} />
                 </FormGroup>
