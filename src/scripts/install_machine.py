@@ -101,6 +101,7 @@ def prepare_cloud_init(args):
             suffix="-user-data",
             mode='w+'
         )
+        network_config_file = None
         if args.get('cloudInitMode') == 'yaml':
             user_data = args.get('cloudInitUserData')
             if not user_data and args.get('cloudInitUserDataB64'):
@@ -108,8 +109,24 @@ def prepare_cloud_init(args):
                     user_data = base64.b64decode(args['cloudInitUserDataB64']).decode('utf-8')
                 except Exception as ex:
                     raise ValueError("Invalid cloud-init user-data: unable to decode base64 content") from ex
+
+            network_config = args.get('cloudInitNetworkConfig')
+            if not network_config and args.get('cloudInitNetworkConfigB64'):
+                try:
+                    network_config = base64.b64decode(args['cloudInitNetworkConfigB64']).decode('utf-8')
+                except Exception as ex:
+                    raise ValueError("Invalid cloud-init network-config: unable to decode base64 content") from ex
+
             if user_data:
                 user_data_file.write(user_data)
+            if network_config:
+                network_config_file = tempfile.NamedTemporaryFile(
+                    prefix="cockpit-machines-",
+                    suffix="-network-config",
+                    mode='w+'
+                )
+                network_config_file.write(network_config)
+                network_config_file.flush()
         else:
             user_data_file.write("#cloud-config\n")
             if args['userLogin']:
@@ -133,6 +150,8 @@ def prepare_cloud_init(args):
 
         user_data_file.flush()
         params.append(f"user-data={user_data_file.name}")
+        if network_config_file:
+            params.append(f"network-config={network_config_file.name}")
 
     yield params
 
@@ -325,6 +344,9 @@ def inject_metadata(xml):
         if args.get('cloudInitUserData'):
             cloud_init_user_data_b64 = base64.b64encode(args['cloudInitUserData'].encode('utf-8')).decode('ascii')
             add_metadata_element("cloud_init_user_data_b64", cloud_init_user_data_b64)
+        if args.get('cloudInitNetworkConfig'):
+            cloud_init_network_config_b64 = base64.b64encode(args['cloudInitNetworkConfig'].encode('utf-8')).decode('ascii')
+            add_metadata_element("cloud_init_network_config_b64", cloud_init_network_config_b64)
         if args['rootPassword']:
             add_metadata_element("root_password", args['rootPassword'])
         if args['userLogin']:

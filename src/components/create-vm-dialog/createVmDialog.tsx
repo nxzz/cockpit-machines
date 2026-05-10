@@ -205,6 +205,7 @@ interface VmParams {
     profile: string;
     cloudInitMode: string;
     cloudInitUserData: optString;
+    cloudInitNetworkConfig: optString;
     source: optString;
     sourceType: string;
     offlineToken: optString;
@@ -967,6 +968,7 @@ const CloudInitOptionsRow = ({
     onValueChanged,
     cloudInitMode,
     cloudInitUserData,
+    cloudInitNetworkConfig,
     rootPassword,
     userLogin, userPassword,
     validationFailed,
@@ -974,6 +976,7 @@ const CloudInitOptionsRow = ({
     onValueChanged: OnValueChanged,
     cloudInitMode: string,
     cloudInitUserData: optString,
+    cloudInitNetworkConfig: optString,
     rootPassword: optString,
     userLogin: optString,
     userPassword: optString,
@@ -991,14 +994,22 @@ const CloudInitOptionsRow = ({
                 </FormSelect>
             </FormGroup>
             {showYamlEditor
-                ? <FormGroup label={_("Cloud-init YAML (user-data)")} fieldId="cloud-init-user-data" id="cloud-init-user-data-group">
-                    <TextArea id="cloud-init-user-data"
-                              value={cloudInitUserData || ""}
-                              validated={validationFailed.cloudInitUserData ? "error" : "default"}
-                              onChange={(_, value) => onValueChanged("cloudInitUserData", value)}
-                              rows={12} />
-                    <FormHelper helperTextInvalid={validationFailed.cloudInitUserData} />
-                </FormGroup>
+                ? <>
+                    <FormGroup label={_("Cloud-init YAML (user-data)")} fieldId="cloud-init-user-data" id="cloud-init-user-data-group">
+                        <TextArea id="cloud-init-user-data"
+                                  value={cloudInitUserData || ""}
+                                  validated={validationFailed.cloudInitUserData ? "error" : "default"}
+                                  onChange={(_, value) => onValueChanged("cloudInitUserData", value)}
+                                  rows={12} />
+                        <FormHelper helperTextInvalid={validationFailed.cloudInitUserData} />
+                    </FormGroup>
+                    <FormGroup label={_("Cloud-init YAML (network-config)")} fieldId="cloud-init-network-config" id="cloud-init-network-config-group">
+                        <TextArea id="cloud-init-network-config"
+                                  value={cloudInitNetworkConfig || ""}
+                                  onChange={(_, value) => onValueChanged("cloudInitNetworkConfig", value)}
+                                  rows={8} />
+                    </FormGroup>
+                </>
                 : <>
                     <UsersConfigurationRow rootPassword={rootPassword}
                                            rootPasswordLabelInfo={_("Leave the password blank if you do not wish to set a root password")}
@@ -1370,6 +1381,7 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
             profile: '',
             cloudInitMode: "generated",
             cloudInitUserData: "",
+            cloudInitNetworkConfig: "",
             userPassword: '',
             rootPassword: '',
             userLogin: '',
@@ -1601,6 +1613,7 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                 profile: this.state.profile,
                 cloudInitMode: this.state.cloudInitMode,
                 cloudInitUserData: this.state.cloudInitUserData,
+                cloudInitNetworkConfig: this.state.cloudInitNetworkConfig,
                 memorySize: convertToUnit(this.state.memorySize, this.state.memorySizeUnit, units.MiB),
                 vcpu: this.state.vcpu,
                 storageSize: convertToUnit(this.state.storageSize, this.state.storageSizeUnit, units.GiB),
@@ -1758,6 +1771,7 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                 <CloudInitOptionsRow validationFailed={validationFailed}
                                      cloudInitMode={this.state.cloudInitMode}
                                      cloudInitUserData={this.state.cloudInitUserData}
+                                     cloudInitNetworkConfig={this.state.cloudInitNetworkConfig}
                                      rootPassword={this.state.rootPassword}
                                      userLogin={this.state.userLogin}
                                      userPassword={this.state.userPassword}
