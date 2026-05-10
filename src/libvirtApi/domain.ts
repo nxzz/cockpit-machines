@@ -972,6 +972,7 @@ export async function domainInstall({ vm } : { vm: VM }): Promise<string> {
         sourceType: vm.metadata.installSourceType,
         cloudInitMode: vm.metadata.cloudInitMode,
         cloudInitUserDataB64: vm.metadata.cloudInitUserDataB64,
+        cloudInitNetworkDataB64: vm.metadata.cloudInitNetworkDataB64,
         rootPassword: vm.metadata.rootPassword,
         userLogin: vm.metadata.userLogin,
         userPassword: vm.metadata.userPassword,
