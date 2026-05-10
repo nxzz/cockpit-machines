@@ -304,6 +304,7 @@ def install_vm(args):
 def inject_metadata(xml):
     # Register used namespaces
     ns = {"cockpit_machines": "https://github.com/cockpit-project/cockpit-machines"}
+    ns_uri = ns["cockpit_machines"]
     ET.register_namespace("cockpit_machines", ns["cockpit_machines"])
     ET.register_namespace("libosinfo", "http://libosinfo.org/xmlns/libvirt/domain/1.0")
 
@@ -322,35 +323,38 @@ def inject_metadata(xml):
     if args['type'] == 'install' or args['startVm'] or args['sourceType'] == 'disk_image':
         has_install_phase = "false"
 
-    METADATA = f'''
-<cockpit_machines:data xmlns:cockpit_machines="https://github.com/cockpit-project/cockpit-machines"> \
-  <cockpit_machines:has_install_phase>{has_install_phase}</cockpit_machines:has_install_phase> \
-  <cockpit_machines:install_source_type>{args['sourceType']}</cockpit_machines:install_source_type> \
-  <cockpit_machines:install_source>{args['source']}</cockpit_machines:install_source> \
-  <cockpit_machines:os_variant>{args['os']}</cockpit_machines:os_variant> \
-'''
+    cockpit_machines_metadata_new = ET.Element(f"{{{ns_uri}}}data")
+
+    def add_metadata_element(name, value):
+        if value is None:
+            return
+        element = ET.SubElement(cockpit_machines_metadata_new, f"{{{ns_uri}}}{name}")
+        element.text = str(value)
+
+    add_metadata_element("has_install_phase", has_install_phase)
+    add_metadata_element("install_source_type", args['sourceType'])
+    add_metadata_element("install_source", args['source'])
+    add_metadata_element("os_variant", args['os'])
+
     if has_install_phase == "true" and args['sourceType'] == 'cloud':
         if args.get('cloudInitMode'):
-            METADATA += f"<cockpit_machines:cloud_init_mode>{args['cloudInitMode']}</cockpit_machines:cloud_init_mode>"
+            add_metadata_element("cloud_init_mode", args['cloudInitMode'])
         if args.get('cloudInitUserData'):
             cloud_init_user_data_b64 = base64.b64encode(args['cloudInitUserData'].encode('utf-8')).decode('ascii')
-            METADATA += f"<cockpit_machines:cloud_init_user_data_b64>{cloud_init_user_data_b64}</cockpit_machines:cloud_init_user_data_b64>"
+            add_metadata_element("cloud_init_user_data_b64", cloud_init_user_data_b64)
         if args.get('cloudInitNetworkData'):
             cloud_init_network_data_b64 = base64.b64encode(args['cloudInitNetworkData'].encode('utf-8')).decode('ascii')
-            METADATA += f"<cockpit_machines:cloud_init_network_data_b64>{cloud_init_network_data_b64}</cockpit_machines:cloud_init_network_data_b64>"
+            add_metadata_element("cloud_init_network_data_b64", cloud_init_network_data_b64)
         if args['rootPassword']:
-            METADATA += f"<cockpit_machines:root_password>{args['rootPassword']}</cockpit_machines:root_password>"
+            add_metadata_element("root_password", args['rootPassword'])
         if args['userLogin']:
-            METADATA += f"<cockpit_machines:user_login>{args['userLogin']}</cockpit_machines:user_login>"
+            add_metadata_element("user_login", args['userLogin'])
         if args['userPassword']:
-            METADATA += f"<cockpit_machines:user_password>{args['userPassword']}</cockpit_machines:user_password>"
+            add_metadata_element("user_password", args['userPassword'])
 
     if args['extraArguments']:
-        METADATA += f"<cockpit_machines:extra_arguments>{args['extraArguments']}</cockpit_machines:extra_arguments>"
+        add_metadata_element("extra_arguments", args['extraArguments'])
 
-    METADATA += "</cockpit_machines:data>"
-
-    cockpit_machines_metadata_new = ET.fromstring(METADATA)
     metadata.append(cockpit_machines_metadata_new)
 
     updated_xml = ET.tostring(root)
