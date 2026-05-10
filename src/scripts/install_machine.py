@@ -150,9 +150,10 @@ def prepare_cloud_init(args):
                     user_data_file.write("  expire: False\n")
 
             user_data_file.flush()
-            params.append(f"user-data={user_data_file.name}")
+            cloud_init_opts = [f"user-data={user_data_file.name}"]
             if network_config_file:
-                params.append(f"network-config={network_config_file.name}")
+                cloud_init_opts.append(f"network-config={network_config_file.name}")
+            params.append(",".join(cloud_init_opts))
             yield params
         finally:
             user_data_file.close()
