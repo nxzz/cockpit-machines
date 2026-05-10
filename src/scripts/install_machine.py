@@ -109,6 +109,8 @@ def prepare_cloud_init(args):
                 except Exception as ex:
                     raise ValueError("Invalid cloud-init user-data: unable to decode base64 content") from ex
             if user_data:
+                if not user_data.lstrip().startswith('#'):
+                    user_data_file.write("#cloud-config\n")
                 user_data_file.write(user_data)
         else:
             user_data_file.write("#cloud-config\n")
