@@ -158,7 +158,6 @@ def prepare_cloud_init(args):
             user_data_file.close()
             if network_config_file:
                 network_config_file.close()
-        return
 
     yield params
 
