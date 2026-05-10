@@ -134,7 +134,6 @@ def prepare_cloud_init(args):
         user_data_file.flush()
         cloud_init_arg = f"user-data={user_data_file.name}"
 
-        network_data_file = None
         if args.get('cloudInitMode') == 'yaml' and args.get('cloudInitNetworkData'):
             network_data = args['cloudInitNetworkData']
             network_data_file = tempfile.NamedTemporaryFile(
