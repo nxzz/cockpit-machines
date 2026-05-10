@@ -132,7 +132,21 @@ def prepare_cloud_init(args):
                 user_data_file.write("  expire: False\n")
 
         user_data_file.flush()
-        params.append(f"user-data={user_data_file.name}")
+        cloud_init_arg = f"user-data={user_data_file.name}"
+
+        network_data_file = None
+        if args.get('cloudInitMode') == 'yaml' and args.get('cloudInitNetworkData'):
+            network_data = args['cloudInitNetworkData']
+            network_data_file = tempfile.NamedTemporaryFile(
+                prefix="cockpit-machines-",
+                suffix="-network-config",
+                mode='w+'
+            )
+            network_data_file.write(network_data)
+            network_data_file.flush()
+            cloud_init_arg += f",network-config={network_data_file.name}"
+
+        params.append(cloud_init_arg)
 
     yield params
 
