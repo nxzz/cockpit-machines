@@ -438,6 +438,8 @@ export async function domainCreate({
     os,
     osVersion,
     profile,
+    cloudInitMode,
+    cloudInitUserData,
     rootPassword,
     source,
     sourceType,
