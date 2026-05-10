@@ -104,7 +104,10 @@ def prepare_cloud_init(args):
         if args.get('cloudInitMode') == 'yaml':
             user_data = args.get('cloudInitUserData')
             if not user_data and args.get('cloudInitUserDataB64'):
-                user_data = base64.b64decode(args['cloudInitUserDataB64']).decode('utf-8')
+                try:
+                    user_data = base64.b64decode(args['cloudInitUserDataB64']).decode('utf-8')
+                except Exception as ex:
+                    raise ValueError("Invalid cloud-init user-data: unable to decode base64 content") from ex
             if user_data:
                 user_data_file.write(user_data)
         else:

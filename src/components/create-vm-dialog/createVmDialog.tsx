@@ -175,6 +175,10 @@ function getDefaultNewStoragePool(connectionName: ConnectionName, storagePools: 
     return pools[0].name;
 }
 
+function resolveSelectedStoragePoolName(storagePools: StoragePool[], requestedPoolName: string): string {
+    return storagePools.find(pool => pool.name === requestedPoolName)?.name || storagePools[0]?.name || "";
+}
+
 function getVmName(connectionName: ConnectionName, vms: VM[], os: OSInfo) {
     let retName = os.shortId;
 
@@ -1131,13 +1135,14 @@ const StorageRow = ({
     createMode: number,
 }) => {
     let validationStateStorage: 'error' | 'default' | 'warning' = validationFailed.storage ? 'error' : 'default';
-    const poolSpaceAvailable = (newStoragePoolName
-        ? getPoolSpaceAvailable({ storagePools, poolName: newStoragePoolName, connectionName })
+    const selectedNewStoragePoolName = resolveSelectedStoragePoolName(storagePools, newStoragePoolName);
+    const poolSpaceAvailable = (selectedNewStoragePoolName
+        ? getPoolSpaceAvailable({ storagePools, poolName: selectedNewStoragePoolName, connectionName })
         : getSpaceAvailable(storagePools, connectionName));
     let helperTextNewVolume = (
         poolSpaceAvailable
             ? cockpit.format(
-                _("$0 $1 available in selected storage pool"),
+                _("$0 $1 available in storage pool"),
                 toReadableNumber(convertToUnit(poolSpaceAvailable, units.B, storageSizeUnit)),
                 storageSizeUnit
             )
@@ -1217,7 +1222,7 @@ const StorageRow = ({
                 {storagePools.length > 0 &&
                 <FormGroup label={_("Storage pool")} fieldId='new-storage-pool-select' id='new-storage-pool-group'>
                     <FormSelect id="new-storage-pool-select"
-                                value={newStoragePoolName}
+                                value={selectedNewStoragePoolName}
                                 onChange={(_event, value) => onValueChanged("newStoragePool", value)}>
                         {storagePools.map(pool => (
                             <FormSelectOption value={pool.name}
@@ -1768,7 +1773,7 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                 </Form>
             );
 
-        const unattendedInstallation = this.state.cloudInitMode !== "yaml" && (this.state.rootPassword || this.state.userLogin || this.state.userPassword);
+        const usesFormBasedUnattendedInstallation = this.state.cloudInitMode !== "yaml" && (this.state.rootPassword || this.state.userLogin || this.state.userPassword);
         // This happens if offlineToken was supplied and we are either still obtaining access token (validating offline token) or failed to obtain one
         const downloadingRhelDisabled = !isEmpty(this.state.offlineToken) && isEmpty(this.state.accessToken);
         let createAndEdit = (
@@ -1779,14 +1784,14 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                     isAriaDisabled={!!(
                         this.state.createMode === EDIT ||
                         Object.getOwnPropertyNames(validationFailed).length > 0 ||
-                        (this.state.sourceType === DOWNLOAD_AN_OS && unattendedInstallation) ||
+                        (this.state.sourceType === DOWNLOAD_AN_OS && usesFormBasedUnattendedInstallation) ||
                         downloadingRhelDisabled
                     )}
                     onClick={() => this.onCreateClicked(false)}>
                 {this.props.mode == 'create' ? _("Create and edit") : _("Import and edit")}
             </Button>
         );
-        if (unattendedInstallation) {
+        if (usesFormBasedUnattendedInstallation) {
             createAndEdit = (
                 <Tooltip id='create-and-edit-disabled-tooltip'
                          key="create-and-edit-tooltip"
