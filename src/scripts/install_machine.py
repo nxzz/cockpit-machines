@@ -311,6 +311,8 @@ def inject_metadata(xml):
     # ET.fromstring() already wants UTF-8 encoded bytes
     root = ET.fromstring(xml)
     metadata = root.find('metadata')
+    if metadata is None:
+        metadata = ET.SubElement(root, 'metadata')
     cockpit_machines_metadata = metadata.find('cockpit_machines:data', ns)
     if cockpit_machines_metadata:
         metadata.remove(cockpit_machines_metadata)
