@@ -102,56 +102,63 @@ def prepare_cloud_init(args):
             mode='w+'
         )
         network_config_file = None
-        if args.get('cloudInitMode') == 'yaml':
-            user_data = args.get('cloudInitUserData')
-            if not user_data and args.get('cloudInitUserDataB64'):
-                try:
-                    user_data = base64.b64decode(args['cloudInitUserDataB64']).decode('utf-8')
-                except Exception as ex:
-                    raise ValueError("Invalid cloud-init user-data: unable to decode base64 content") from ex
+        try:
+            if args.get('cloudInitMode') == 'yaml':
+                user_data = args.get('cloudInitUserData')
+                if not user_data and args.get('cloudInitUserDataB64'):
+                    try:
+                        user_data = base64.b64decode(args['cloudInitUserDataB64']).decode('utf-8')
+                    except Exception as ex:
+                        raise ValueError("Invalid cloud-init user-data: unable to decode base64 content") from ex
 
-            network_config = args.get('cloudInitNetworkConfig')
-            if not network_config and args.get('cloudInitNetworkConfigB64'):
-                try:
-                    network_config = base64.b64decode(args['cloudInitNetworkConfigB64']).decode('utf-8')
-                except Exception as ex:
-                    raise ValueError("Invalid cloud-init network-config: unable to decode base64 content") from ex
+                network_config = args.get('cloudInitNetworkConfig')
+                if not network_config and args.get('cloudInitNetworkConfigB64'):
+                    try:
+                        network_config = base64.b64decode(args['cloudInitNetworkConfigB64']).decode('utf-8')
+                    except Exception as ex:
+                        raise ValueError("Invalid cloud-init network-config: unable to decode base64 content") from ex
 
-            if user_data:
-                user_data_file.write(user_data)
-            if network_config:
-                network_config_file = tempfile.NamedTemporaryFile(
-                    prefix="cockpit-machines-",
-                    suffix="-network-config",
-                    mode='w+'
-                )
-                network_config_file.write(network_config)
-                network_config_file.flush()
-        else:
-            user_data_file.write("#cloud-config\n")
-            if args['userLogin']:
-                user_data_file.write("users:\n")
-                user_data_file.write(f"  - name: {args['userLogin']}\n")
-                if 'sshKeys' in args and len(args['sshKeys']) > 0:
-                    user_data_file.write("    ssh_authorized_keys:\n")
-                    for key in args['sshKeys']:
-                        user_data_file.write(f"      - {key}\n")
+                if user_data:
+                    user_data_file.write(user_data)
+                if network_config:
+                    network_config_file = tempfile.NamedTemporaryFile(
+                        prefix="cockpit-machines-",
+                        suffix="-network-config",
+                        mode='w+'
+                    )
+                    network_config_file.write(network_config)
+                    network_config_file.flush()
+            else:
+                user_data_file.write("#cloud-config\n")
+                if args['userLogin']:
+                    user_data_file.write("users:\n")
+                    user_data_file.write(f"  - name: {args['userLogin']}\n")
+                    if 'sshKeys' in args and len(args['sshKeys']) > 0:
+                        user_data_file.write("    ssh_authorized_keys:\n")
+                        for key in args['sshKeys']:
+                            user_data_file.write(f"      - {key}\n")
 
-            if args['rootPassword'] or args['userPassword']:
-                # enable SSH password login if any password is set
-                user_data_file.write("ssh_pwauth: true\n")
-                user_data_file.write("chpasswd:\n")
-                user_data_file.write("  list: |\n")
-                if args['rootPassword']:
-                    user_data_file.write(f"    root:{args['rootPassword']}\n")
-                if args['userPassword']:
-                    user_data_file.write(f"    {args['userLogin']}:{args['userPassword']}\n")
-                user_data_file.write("  expire: False\n")
+                if args['rootPassword'] or args['userPassword']:
+                    # enable SSH password login if any password is set
+                    user_data_file.write("ssh_pwauth: true\n")
+                    user_data_file.write("chpasswd:\n")
+                    user_data_file.write("  list: |\n")
+                    if args['rootPassword']:
+                        user_data_file.write(f"    root:{args['rootPassword']}\n")
+                    if args['userPassword']:
+                        user_data_file.write(f"    {args['userLogin']}:{args['userPassword']}\n")
+                    user_data_file.write("  expire: False\n")
 
-        user_data_file.flush()
-        params.append(f"user-data={user_data_file.name}")
-        if network_config_file:
-            params.append(f"network-config={network_config_file.name}")
+            user_data_file.flush()
+            params.append(f"user-data={user_data_file.name}")
+            if network_config_file:
+                params.append(f"network-config={network_config_file.name}")
+            yield params
+        finally:
+            user_data_file.close()
+            if network_config_file:
+                network_config_file.close()
+        return
 
     yield params
 
