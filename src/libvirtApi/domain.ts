@@ -412,6 +412,7 @@ export async function domainChangeBootOrder({
 
 interface DomainSpec {
     memorySize: number,
+    vcpu: number,
     os: string,
     profile: string,
     cloudInitMode: string,
@@ -435,6 +436,7 @@ interface DomainSpec {
 export async function domainCreate({
     connectionName,
     memorySize,
+    vcpu,
     os,
     osVersion,
     profile,
@@ -468,6 +470,7 @@ export async function domainCreate({
     const args: DomainCreateScriptArgs = {
         connectionName,
         memorySize,
+        vcpu,
         os,
         profile,
         cloudInitMode,

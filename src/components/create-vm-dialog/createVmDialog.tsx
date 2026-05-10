@@ -211,6 +211,7 @@ interface VmParams {
     accessToken: optString;
     memorySize: number;
     memorySizeUnit: string;
+    vcpu: number;
     storagePool: string;
     newStoragePool: string;
     storageVolume: string | undefined;
@@ -232,6 +233,7 @@ interface ValidationFailed {
     source?: string;
     offlineToken?: string;
     memory?: string;
+    cpu?: string;
     storage?: string;
     userLogin?: string;
     userPassword?: string;
@@ -291,6 +293,10 @@ function validateParams(vmParams: VmParams & ValidateParamsExtraArgs): Validatio
 
     if (vmParams.memorySize === 0) {
         validationFailed.memory = _("Memory must not be 0");
+    }
+
+    if (vmParams.vcpu <= 0) {
+        validationFailed.cpu = _("vCPU count must be greater than 0");
     }
 
     if ((vmParams.storagePool == 'NewVolumeQCOW2' || vmParams.storagePool == 'NewVolumeRAW') && vmParams.storageSize === 0) {
@@ -990,7 +996,6 @@ const CloudInitOptionsRow = ({
                               value={cloudInitUserData || ""}
                               validated={validationFailed.cloudInitUserData ? "error" : "default"}
                               onChange={(_, value) => onValueChanged("cloudInitUserData", value)}
-                              placeholder={_("#cloud-config\nhostname: my-vm\n...")}
                               rows={12} />
                     <FormHelper helperTextInvalid={validationFailed.cloudInitUserData} />
                 </FormGroup>
@@ -1072,6 +1077,32 @@ const MemoryRow = ({
                             variant={validationStateMemory}
                             helperTextInvalid={validationStateMemory == "error" && validationFailed.memory}
                             helperText={helperText} />
+        </FormGroup>
+    );
+};
+
+const CpuRow = ({
+    vcpu,
+    onValueChanged,
+    validationFailed
+} : {
+    vcpu: number,
+    onValueChanged: OnValueChanged,
+    validationFailed: ValidationFailed,
+}) => {
+    const validationStateCpu: 'error' | 'default' = validationFailed.cpu ? 'error' : 'default';
+
+    return (
+        <FormGroup label={_("vCPU count")}
+                   fieldId='cpu-count' id='cpu-group'>
+            <TextInput id='cpu-count' value={vcpu}
+                       className="size-input"
+                       onKeyUp={digitFilter}
+                       validated={validationStateCpu}
+                       onChange={(_, value) => onValueChanged('vcpu', parseInt(value) || 0)} />
+            <FormHelper fieldId="cpu-count"
+                        variant={validationStateCpu}
+                        helperTextInvalid={validationFailed.cpu} />
         </FormGroup>
     );
 };
@@ -1326,6 +1357,7 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
             source: props.initialSource || '',
             os: undefined,
             ...getMemoryDefaults(props.nodeMaxMemory),
+            vcpu: 1,
             ...getStorageDefaults(),
             storagePool: 'NewVolumeQCOW2',
             newStoragePool: getDefaultNewStoragePool((appState.systemSocketInactive
@@ -1570,6 +1602,7 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                 cloudInitMode: this.state.cloudInitMode,
                 cloudInitUserData: this.state.cloudInitUserData,
                 memorySize: convertToUnit(this.state.memorySize, this.state.memorySizeUnit, units.MiB),
+                vcpu: this.state.vcpu,
                 storageSize: convertToUnit(this.state.storageSize, this.state.storageSizeUnit, units.GiB),
                 storagePool: this.state.storagePool,
                 newStoragePool: this.state.newStoragePool,
@@ -1698,6 +1731,11 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                     onValueChanged={this.onValueChanged}
                     validationFailed={validationFailed}
                     minimumMemory={this.state.minimumMemory}
+                />
+                <CpuRow
+                    vcpu={this.state.vcpu}
+                    onValueChanged={this.onValueChanged}
+                    validationFailed={validationFailed}
                 />
             </>
         );
