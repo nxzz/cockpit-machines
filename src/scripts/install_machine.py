@@ -9,6 +9,7 @@ import sys
 import tempfile
 import traceback
 import xml.etree.ElementTree as ET
+import base64
 from contextlib import contextmanager
 from urllib.parse import urlparse
 
@@ -100,25 +101,32 @@ def prepare_cloud_init(args):
             suffix="-user-data",
             mode='w+'
         )
-        user_data_file.write("#cloud-config\n")
-        if args['userLogin']:
-            user_data_file.write("users:\n")
-            user_data_file.write(f"  - name: {args['userLogin']}\n")
-            if 'sshKeys' in args and len(args['sshKeys']) > 0:
-                user_data_file.write("    ssh_authorized_keys:\n")
-                for key in args['sshKeys']:
-                    user_data_file.write(f"      - {key}\n")
+        if args.get('cloudInitMode') == 'yaml':
+            user_data = args.get('cloudInitUserData')
+            if not user_data and args.get('cloudInitUserDataB64'):
+                user_data = base64.b64decode(args['cloudInitUserDataB64']).decode('utf-8')
+            if user_data:
+                user_data_file.write(user_data)
+        else:
+            user_data_file.write("#cloud-config\n")
+            if args['userLogin']:
+                user_data_file.write("users:\n")
+                user_data_file.write(f"  - name: {args['userLogin']}\n")
+                if 'sshKeys' in args and len(args['sshKeys']) > 0:
+                    user_data_file.write("    ssh_authorized_keys:\n")
+                    for key in args['sshKeys']:
+                        user_data_file.write(f"      - {key}\n")
 
-        if args['rootPassword'] or args['userPassword']:
-            # enable SSH password login if any password is set
-            user_data_file.write("ssh_pwauth: true\n")
-            user_data_file.write("chpasswd:\n")
-            user_data_file.write("  list: |\n")
-            if args['rootPassword']:
-                user_data_file.write(f"    root:{args['rootPassword']}\n")
-            if args['userPassword']:
-                user_data_file.write(f"    {args['userLogin']}:{args['userPassword']}\n")
-            user_data_file.write("  expire: False\n")
+            if args['rootPassword'] or args['userPassword']:
+                # enable SSH password login if any password is set
+                user_data_file.write("ssh_pwauth: true\n")
+                user_data_file.write("chpasswd:\n")
+                user_data_file.write("  list: |\n")
+                if args['rootPassword']:
+                    user_data_file.write(f"    root:{args['rootPassword']}\n")
+                if args['userPassword']:
+                    user_data_file.write(f"    {args['userLogin']}:{args['userPassword']}\n")
+                user_data_file.write("  expire: False\n")
 
         user_data_file.flush()
         params.append(f"user-data={user_data_file.name}")
@@ -192,7 +200,10 @@ def prepare_virt_install_params(args):
                 if args['storagePool'] not in ['NewVolumeQCOW2', 'NewVolumeRAW']:
                     disk = f"vol={args['storagePool']}/{args['storageVolume']}"
                 else:
-                    disk = f"size={args['storageSize']}"
+                    if args.get('newStoragePool') and args['newStoragePool'] != "default":
+                        disk = f"pool={args['newStoragePool']},size={args['storageSize']}"
+                    else:
+                        disk = f"size={args['storageSize']}"
                     if args['storagePool'] == 'NewVolumeQCOW2':
                         disk += ",format=qcow2"
                     elif args['storagePool'] == 'NewVolumeRAW':
@@ -297,6 +308,11 @@ def inject_metadata(xml):
   <cockpit_machines:os_variant>{args['os']}</cockpit_machines:os_variant> \
 '''
     if has_install_phase == "true" and args['sourceType'] == 'cloud':
+        if args.get('cloudInitMode'):
+            METADATA += f"<cockpit_machines:cloud_init_mode>{args['cloudInitMode']}</cockpit_machines:cloud_init_mode>"
+        if args.get('cloudInitUserData'):
+            cloud_init_user_data_b64 = base64.b64encode(args['cloudInitUserData'].encode('utf-8')).decode('ascii')
+            METADATA += f"<cockpit_machines:cloud_init_user_data_b64>{cloud_init_user_data_b64}</cockpit_machines:cloud_init_user_data_b64>"
         if args['rootPassword']:
             METADATA += f"<cockpit_machines:root_password>{args['rootPassword']}</cockpit_machines:root_password>"
         if args['userLogin']:

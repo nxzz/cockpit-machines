@@ -377,6 +377,8 @@ export function parseDomainDumpxml(connectionName: ConnectionName, domXml: strin
             installSourceType: parseDumpxmlMachinesMetadataElement(metadataElem, 'install_source_type'),
             installSource: parseDumpxmlMachinesMetadataElement(metadataElem, 'install_source'),
             osVariant: parseDumpxmlMachinesMetadataElement(metadataElem, 'os_variant'),
+            cloudInitMode: parseDumpxmlMachinesMetadataElement(metadataElem, 'cloud_init_mode'),
+            cloudInitUserDataB64: parseDumpxmlMachinesMetadataElement(metadataElem, 'cloud_init_user_data_b64'),
             rootPassword: parseDumpxmlMachinesMetadataElement(metadataElem, 'root_password'),
             userLogin: parseDumpxmlMachinesMetadataElement(metadataElem, 'user_login'),
             userPassword: parseDumpxmlMachinesMetadataElement(metadataElem, 'user_password'),

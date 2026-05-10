@@ -414,11 +414,14 @@ interface DomainSpec {
     memorySize: number,
     os: string,
     profile: string,
+    cloudInitMode: string,
+    cloudInitUserData: optString,
     rootPassword: optString,
     source: optString,
     sourceType: string,
     startVm: boolean,
     storagePool: string,
+    newStoragePool: string,
     storageSize: number,
     storageVolume: optString,
     unattended: boolean,
@@ -440,6 +443,7 @@ export async function domainCreate({
     sourceType,
     startVm,
     storagePool,
+    newStoragePool,
     storageSize,
     storageVolume,
     unattended,
@@ -464,11 +468,14 @@ export async function domainCreate({
         memorySize,
         os,
         profile,
+        cloudInitMode,
+        cloudInitUserData,
         rootPassword,
         source,
         sourceType,
         startVm,
         storagePool,
+        newStoragePool,
         storageSize,
         storageVolume,
         type: "create",
@@ -483,7 +490,7 @@ export async function domainCreate({
     logDebug(`CREATE_VM(${vmName}): install_machine.py '${JSON.stringify(args)}'`);
 
     const hashPasswords = async (args: DomainCreateScriptArgs): Promise<void> => {
-        if (args.sourceType === CLOUD_IMAGE) {
+        if (args.sourceType === CLOUD_IMAGE && args.cloudInitMode !== "yaml") {
             const promises = [];
             if (args.userPassword)
                 promises.push(spawn("session", ['openssl', 'passwd', '-5', '--stdin']).input(args.userPassword));
@@ -955,6 +962,8 @@ export async function domainInstall({ vm } : { vm: VM }): Promise<string> {
         os: vm.metadata.osVariant,
         source: vm.metadata.installSource,
         sourceType: vm.metadata.installSourceType,
+        cloudInitMode: vm.metadata.cloudInitMode,
+        cloudInitUserDataB64: vm.metadata.cloudInitUserDataB64,
         rootPassword: vm.metadata.rootPassword,
         userLogin: vm.metadata.userLogin,
         userPassword: vm.metadata.userPassword,
