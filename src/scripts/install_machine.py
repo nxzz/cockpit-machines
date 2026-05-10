@@ -224,7 +224,7 @@ def prepare_virt_install_params(args):
 
         # VCPUs
         if 'vcpu' in args:
-            params += ['--vcpus', args['vcpu']]
+            params += ['--vcpus', str(args['vcpu'])]
 
         # Firmware
         if 'firmware' in args:
