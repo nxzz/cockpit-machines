@@ -329,6 +329,9 @@ export interface VMMetadata {
     installSourceType: optString;
     installSource: optString;
     osVariant: optString;
+    cloudInitMode: optString;
+    cloudInitUserDataB64: optString;
+    cloudInitNetworkConfigB64: optString;
     rootPassword: optString;
     userLogin: optString;
     userPassword: optString;
