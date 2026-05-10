@@ -132,26 +132,7 @@ def prepare_cloud_init(args):
                 user_data_file.write("  expire: False\n")
 
         user_data_file.flush()
-        cloud_init_arg = f"user-data={user_data_file.name}"
-
-        network_data = args.get('cloudInitNetworkData')
-        if not network_data and args.get('cloudInitNetworkDataB64'):
-            try:
-                network_data = base64.b64decode(args['cloudInitNetworkDataB64']).decode('utf-8')
-            except Exception as ex:
-                raise ValueError("Invalid cloud-init network-config: unable to decode base64 content") from ex
-
-        if args.get('cloudInitMode') == 'yaml' and network_data and network_data.strip():
-            network_data_file = tempfile.NamedTemporaryFile(
-                prefix="cockpit-machines-",
-                suffix="-network-config",
-                mode='w+'
-            )
-            network_data_file.write(network_data)
-            network_data_file.flush()
-            cloud_init_arg += f",network-config={network_data_file.name}"
-
-        params.append(cloud_init_arg)
+        params.append(f"user-data={user_data_file.name}")
 
     yield params
 
@@ -344,9 +325,6 @@ def inject_metadata(xml):
         if args.get('cloudInitUserData'):
             cloud_init_user_data_b64 = base64.b64encode(args['cloudInitUserData'].encode('utf-8')).decode('ascii')
             add_metadata_element("cloud_init_user_data_b64", cloud_init_user_data_b64)
-        if args.get('cloudInitNetworkData'):
-            cloud_init_network_data_b64 = base64.b64encode(args['cloudInitNetworkData'].encode('utf-8')).decode('ascii')
-            add_metadata_element("cloud_init_network_data_b64", cloud_init_network_data_b64)
         if args['rootPassword']:
             add_metadata_element("root_password", args['rootPassword'])
         if args['userLogin']:
