@@ -163,6 +163,22 @@ function getStorageDefaults() {
     return { storageSize, storageSizeUnit, minimumStorage };
 }
 
+function getDefaultNewStoragePool(connectionName: ConnectionName, storagePools: StoragePool[]): string {
+    const pools = storagePools.filter(pool => pool.connectionName === connectionName);
+    if (pools.length === 0)
+        return "";
+
+    const defaultPool = pools.find(pool => pool.name === "default");
+    if (defaultPool)
+        return defaultPool.name;
+
+    return pools[0].name;
+}
+
+function resolveSelectedStoragePoolName(storagePools: StoragePool[], requestedPoolName: string): string {
+    return storagePools.find(pool => pool.name === requestedPoolName)?.name || storagePools[0]?.name || "";
+}
+
 function getVmName(connectionName: ConnectionName, vms: VM[], os: OSInfo) {
     let retName = os.shortId;
 
@@ -187,13 +203,18 @@ interface VmParams {
     suggestedVmName: string;
     os: OSInfo | undefined;
     profile: string;
+    cloudInitMode: string;
+    cloudInitUserData: optString;
+    cloudInitNetworkConfig: optString;
     source: optString;
     sourceType: string;
     offlineToken: optString;
     accessToken: optString;
     memorySize: number;
     memorySizeUnit: string;
+    vcpu: number;
     storagePool: string;
+    newStoragePool: string;
     storageVolume: string | undefined;
     storageSize: number;
     storageSizeUnit: string;
@@ -213,9 +234,11 @@ interface ValidationFailed {
     source?: string;
     offlineToken?: string;
     memory?: string;
+    cpu?: string;
     storage?: string;
     userLogin?: string;
     userPassword?: string;
+    cloudInitUserData?: string;
 }
 
 interface ValidateParamsExtraArgs {
@@ -226,6 +249,7 @@ interface ValidateParamsExtraArgs {
 
 function validateParams(vmParams: VmParams & ValidateParamsExtraArgs): ValidationFailed {
     const validationFailed: ValidationFailed = {};
+    const cloudInitUsesYaml = vmParams.sourceType === CLOUD_IMAGE && vmParams.cloudInitMode === "yaml";
 
     if (isEmpty(vmParams.vmName.trim()) && isEmpty(vmParams.suggestedVmName.trim()))
         validationFailed.vmName = _("Name must not be empty");
@@ -272,8 +296,16 @@ function validateParams(vmParams: VmParams & ValidateParamsExtraArgs): Validatio
         validationFailed.memory = _("Memory must not be 0");
     }
 
+    if (vmParams.vcpu <= 0) {
+        validationFailed.cpu = _("vCPU count must be greater than 0");
+    }
+
     if ((vmParams.storagePool == 'NewVolumeQCOW2' || vmParams.storagePool == 'NewVolumeRAW') && vmParams.storageSize === 0) {
         validationFailed.storage = _("Storage size must not be 0");
+    }
+
+    if (cloudInitUsesYaml && isEmpty((vmParams.cloudInitUserData || "").trim())) {
+        validationFailed.cloudInitUserData = _("Cloud-init YAML must not be empty");
     }
 
     if (vmParams.nodeMaxMemory && vmParams.memorySize > convertToUnit(vmParams.nodeMaxMemory, units.KiB, vmParams.memorySizeUnit)) {
@@ -284,12 +316,12 @@ function validateParams(vmParams: VmParams & ValidateParamsExtraArgs): Validatio
         );
     }
 
-    if (vmParams.userLogin && !((!!vmParams.userPassword) || vmParams.sshKeys.length > 0)) {
+    if (!cloudInitUsesYaml && vmParams.userLogin && !((!!vmParams.userPassword) || vmParams.sshKeys.length > 0)) {
         validationFailed.userPassword = _("User password must not be empty when user login is set");
     }
-    if (vmParams.userPassword && !vmParams.userLogin) {
+    if (!cloudInitUsesYaml && vmParams.userPassword && !vmParams.userLogin) {
         validationFailed.userLogin = _("User login must not be empty when user password is set");
-    } else if (vmParams.sshKeys.length > 0 && !vmParams.userLogin) {
+    } else if (!cloudInitUsesYaml && vmParams.sshKeys.length > 0 && !vmParams.userLogin) {
         validationFailed.userLogin = _("User login must not be empty when SSH keys are set");
     }
 
@@ -934,31 +966,65 @@ const SshKeysRow = ({
 
 const CloudInitOptionsRow = ({
     onValueChanged,
+    cloudInitMode,
+    cloudInitUserData,
+    cloudInitNetworkConfig,
     rootPassword,
     userLogin, userPassword,
     validationFailed,
 } : {
     onValueChanged: OnValueChanged,
+    cloudInitMode: string,
+    cloudInitUserData: optString,
+    cloudInitNetworkConfig: optString,
     rootPassword: optString,
     userLogin: optString,
     userPassword: optString,
     validationFailed: ValidationFailed,
 }) => {
+    const showYamlEditor = cloudInitMode === "yaml";
     return (
         <>
-            <UsersConfigurationRow rootPassword={rootPassword}
-                                   rootPasswordLabelInfo={_("Leave the password blank if you do not wish to set a root password")}
-                                   showUserFields
-                                   userLogin={userLogin}
-                                   userPassword={userPassword}
-                                   validationFailed={validationFailed}
-                                   onValueChanged={onValueChanged} />
-            <DynamicListForm id="create-vm-dialog-ssh-key"
-                emptyStateString={_("No SSH keys specified")}
-                label={_("SSH keys")}
-                actionLabel={_("Add SSH keys")}
-                onChange={value => onValueChanged('sshKeys', value.filter(x => !!x) as unknown as { value: string }[])}
-                itemcomponent={SshKeysRow as unknown as InstanceType<typeof DynamicListForm>["props"]["itemcomponent"]} />
+            <FormGroup label={_("Cloud-init settings")} fieldId="cloud-init-mode-select">
+                <FormSelect id="cloud-init-mode-select"
+                            value={cloudInitMode}
+                            onChange={(_event, value) => onValueChanged("cloudInitMode", value)}>
+                    <FormSelectOption value="generated" label={_("Use form fields")} />
+                    <FormSelectOption value="yaml" label={_("Write cloud-init YAML")} />
+                </FormSelect>
+            </FormGroup>
+            {showYamlEditor
+                ? <>
+                    <FormGroup label={_("Cloud-init YAML (user-data)")} fieldId="cloud-init-user-data" id="cloud-init-user-data-group">
+                        <TextArea id="cloud-init-user-data"
+                                  value={cloudInitUserData || ""}
+                                  validated={validationFailed.cloudInitUserData ? "error" : "default"}
+                                  onChange={(_, value) => onValueChanged("cloudInitUserData", value)}
+                                  rows={12} />
+                        <FormHelper helperTextInvalid={validationFailed.cloudInitUserData} />
+                    </FormGroup>
+                    <FormGroup label={_("Cloud-init YAML (network-config)")} fieldId="cloud-init-network-config" id="cloud-init-network-config-group">
+                        <TextArea id="cloud-init-network-config"
+                                  value={cloudInitNetworkConfig || ""}
+                                  onChange={(_, value) => onValueChanged("cloudInitNetworkConfig", value)}
+                                  rows={8} />
+                    </FormGroup>
+                </>
+                : <>
+                    <UsersConfigurationRow rootPassword={rootPassword}
+                                           rootPasswordLabelInfo={_("Leave the password blank if you do not wish to set a root password")}
+                                           showUserFields
+                                           userLogin={userLogin}
+                                           userPassword={userPassword}
+                                           validationFailed={validationFailed}
+                                           onValueChanged={onValueChanged} />
+                    <DynamicListForm id="create-vm-dialog-ssh-key"
+                        emptyStateString={_("No SSH keys specified")}
+                        label={_("SSH keys")}
+                        actionLabel={_("Add SSH keys")}
+                        onChange={value => onValueChanged('sshKeys', value.filter(x => !!x) as unknown as { value: string }[])}
+                        itemcomponent={SshKeysRow as unknown as InstanceType<typeof DynamicListForm>["props"]["itemcomponent"]} />
+                </>}
         </>
     );
 };
@@ -1026,6 +1092,32 @@ const MemoryRow = ({
     );
 };
 
+const CpuRow = ({
+    vcpu,
+    onValueChanged,
+    validationFailed
+} : {
+    vcpu: number,
+    onValueChanged: OnValueChanged,
+    validationFailed: ValidationFailed,
+}) => {
+    const validationStateCpu: 'error' | 'default' = validationFailed.cpu ? 'error' : 'default';
+
+    return (
+        <FormGroup label={_("vCPU count")}
+                   fieldId='cpu-count' id='cpu-group'>
+            <TextInput id='cpu-count' value={vcpu}
+                       className="size-input"
+                       onKeyUp={digitFilter}
+                       validated={validationStateCpu}
+                       onChange={(_, value) => onValueChanged('vcpu', parseInt(value) || 0)} />
+            <FormHelper fieldId="cpu-count"
+                        variant={validationStateCpu}
+                        helperTextInvalid={validationFailed.cpu} />
+        </FormGroup>
+    );
+};
+
 const ExtraArgumentsRow = ({
     extraArguments,
     onValueChanged,
@@ -1064,6 +1156,7 @@ const StorageRow = ({
     onValueChanged,
     minimumStorage,
     storagePoolName,
+    newStoragePoolName,
     storagePools,
     storageVolume,
     vms,
@@ -1077,6 +1170,7 @@ const StorageRow = ({
     onValueChanged: OnValueChanged,
     minimumStorage: number,
     storagePoolName: string,
+    newStoragePoolName: string,
     storagePools: StoragePool[],
     storageVolume: optString,
     vms: VM[],
@@ -1084,11 +1178,14 @@ const StorageRow = ({
     createMode: number,
 }) => {
     let validationStateStorage: 'error' | 'default' | 'warning' = validationFailed.storage ? 'error' : 'default';
-    const poolSpaceAvailable = getSpaceAvailable(storagePools, connectionName);
+    const selectedNewStoragePoolName = resolveSelectedStoragePoolName(storagePools, newStoragePoolName);
+    const poolSpaceAvailable = (selectedNewStoragePoolName
+        ? getPoolSpaceAvailable({ storagePools, poolName: selectedNewStoragePoolName, connectionName })
+        : getSpaceAvailable(storagePools, connectionName));
     let helperTextNewVolume = (
         poolSpaceAvailable
             ? cockpit.format(
-                _("$0 $1 available at default location"),
+                _("$0 $1 available in storage pool"),
                 toReadableNumber(convertToUnit(poolSpaceAvailable, units.B, storageSizeUnit)),
                 storageSizeUnit
             )
@@ -1164,30 +1261,44 @@ const StorageRow = ({
             </FormGroup>}
 
             { (storagePoolName === "NewVolumeQCOW2" || storagePoolName === "NewVolumeRAW") &&
-            <FormGroup label={_("Storage limit")} fieldId='storage-limit'
-                           id='storage-group'>
-                <InputGroup>
-                    <TextInput id='storage-limit' value={storageSize}
-                                   className="size-input"
-                                   onKeyUp={digitFilter}
-                                   onChange={(_, value) => onValueChanged('storageSize', Number(value))} />
-                    <FormSelect id="storage-limit-unit-select"
-                                    data-value={storageSizeUnit}
-                                    className="unit-select"
-                                    value={storageSizeUnit}
-                                    onChange={(_event, value) => onValueChanged('storageSizeUnit', value)}>
-                        <FormSelectOption value={units.MiB.name} key={units.MiB.name}
-                                               label={_("MiB")} />
-                        <FormSelectOption value={units.GiB.name} key={units.GiB.name}
-                                               label={_("GiB")} />
+            <>
+                {storagePools.length > 0 &&
+                <FormGroup label={_("Storage pool")} fieldId='new-storage-pool-select' id='new-storage-pool-group'>
+                    <FormSelect id="new-storage-pool-select"
+                                value={selectedNewStoragePoolName}
+                                onChange={(_event, value) => onValueChanged("newStoragePool", value)}>
+                        {storagePools.map(pool => (
+                            <FormSelectOption value={pool.name}
+                                              key={pool.name}
+                                              label={pool.name} />
+                        ))}
                     </FormSelect>
-                </InputGroup>
-                <FormHelper
-                        fieldId="storage-limit"
-                        variant={validationStateStorage}
-                        helperTextInvalid={validationStateStorage == "error" && validationFailed.storage}
-                        helperText={helperTextNewVolume} />
-            </FormGroup>}
+                </FormGroup>}
+                <FormGroup label={_("Storage limit")} fieldId='storage-limit'
+                               id='storage-group'>
+                    <InputGroup>
+                        <TextInput id='storage-limit' value={storageSize}
+                                       className="size-input"
+                                       onKeyUp={digitFilter}
+                                       onChange={(_, value) => onValueChanged('storageSize', Number(value))} />
+                        <FormSelect id="storage-limit-unit-select"
+                                        data-value={storageSizeUnit}
+                                        className="unit-select"
+                                        value={storageSizeUnit}
+                                        onChange={(_event, value) => onValueChanged('storageSizeUnit', value)}>
+                            <FormSelectOption value={units.MiB.name} key={units.MiB.name}
+                                                   label={_("MiB")} />
+                            <FormSelectOption value={units.GiB.name} key={units.GiB.name}
+                                                   label={_("GiB")} />
+                        </FormSelect>
+                    </InputGroup>
+                    <FormHelper
+                            fieldId="storage-limit"
+                            variant={validationStateStorage}
+                            helperTextInvalid={validationStateStorage == "error" && validationFailed.storage}
+                            helperText={helperTextNewVolume} />
+                </FormGroup>
+            </>}
         </>
     );
 };
@@ -1257,13 +1368,20 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
             source: props.initialSource || '',
             os: undefined,
             ...getMemoryDefaults(props.nodeMaxMemory),
+            vcpu: 1,
             ...getStorageDefaults(),
             storagePool: 'NewVolumeQCOW2',
+            newStoragePool: getDefaultNewStoragePool((appState.systemSocketInactive
+                ? LIBVIRT_SESSION_CONNECTION
+                : LIBVIRT_SYSTEM_CONNECTION), appState.storagePools),
             storageVolume: '',
             startVm: true,
 
             // Unattended installation or cloud init options for cloud images
             profile: '',
+            cloudInitMode: "generated",
+            cloudInitUserData: "",
+            cloudInitNetworkConfig: "",
             userPassword: '',
             rootPassword: '',
             userLogin: '',
@@ -1306,7 +1424,11 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
         const osInfoList = await getOsInfoList();
         await storagePoolGetAll({ connectionName: this.state.connectionName });
 
-        this.setState({ osInfoListLoading: false, osInfoList });
+        this.setState({
+            osInfoListLoading: false,
+            osInfoList,
+            newStoragePool: getDefaultNewStoragePool(this.state.connectionName, appState.storagePools),
+        });
 
         // If initialOS was provided via props, find and set the matching OS
         if (this.props.initialOS) {
@@ -1353,15 +1475,23 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
             break;
         case 'storagePool': {
             cockpit.assert(typeof value == "string");
-            const storagePool = appState.storagePools.filter(pool => pool.connectionName === this.state.connectionName).find(pool => pool.name === value);
-            const storageVolumes = storagePool ? storagePool.volumes : undefined;
-            const storageVolume = storageVolumes ? storageVolumes[0] : undefined;
-            this.setState({
-                storagePool: value,
-                storageVolume: storageVolume ? storageVolume.name : undefined,
-            });
+            if (value === "NewVolumeQCOW2" || value === "NewVolumeRAW" || value === "NoStorage") {
+                this.setState({ storagePool: value });
+            } else {
+                const storagePool = appState.storagePools.filter(pool => pool.connectionName === this.state.connectionName).find(pool => pool.name === value);
+                const storageVolumes = storagePool ? storagePool.volumes : undefined;
+                const storageVolume = storageVolumes ? storageVolumes[0] : undefined;
+                this.setState({
+                    storagePool: value,
+                    storageVolume: storageVolume ? storageVolume.name : undefined,
+                });
+            }
             break;
         }
+        case 'newStoragePool':
+            cockpit.assert(typeof value == "string");
+            this.setState({ newStoragePool: value });
+            break;
         case 'storageVolume':
             this.setState({ [key]: value } as Pick<CreateVmModalState, K>);
             break;
@@ -1388,7 +1518,10 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
             break;
         case 'connectionName':
             cockpit.assert(value == "session" || value == "system");
-            this.setState({ connectionName: value });
+            this.setState({
+                connectionName: value,
+                newStoragePool: getDefaultNewStoragePool(value, appState.storagePools),
+            });
             if (this.state.sourceType == PXE_SOURCE && value == LIBVIRT_SESSION_CONNECTION) {
                 // When changing to session connection, reset media source
                 this.onValueChanged('sourceType', LOCAL_INSTALL_MEDIA_SOURCE);
@@ -1478,9 +1611,14 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                 os: this.state.os ? this.state.os.shortId : 'auto',
                 osVersion: this.state.os ? this.state.os.version : '',
                 profile: this.state.profile,
+                cloudInitMode: this.state.cloudInitMode,
+                cloudInitUserData: this.state.cloudInitUserData,
+                cloudInitNetworkConfig: this.state.cloudInitNetworkConfig,
                 memorySize: convertToUnit(this.state.memorySize, this.state.memorySizeUnit, units.MiB),
+                vcpu: this.state.vcpu,
                 storageSize: convertToUnit(this.state.storageSize, this.state.storageSizeUnit, units.GiB),
                 storagePool: this.state.storagePool,
+                newStoragePool: this.state.newStoragePool,
                 storageVolume: this.state.storageVolume,
                 unattended: unattendedInstallation,
                 userPassword: this.state.userPassword,
@@ -1494,7 +1632,8 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
 
             domainCreate(vmParams).then(() => {
                 if (this.state.storagePool === "NewVolumeQCOW2" || this.state.storagePool === "NewVolumeRAW") {
-                    const storagePool = storagePools.find(pool => pool.connectionName === this.state.connectionName && pool.name === "default");
+                    const selectedPool = this.state.newStoragePool || "default";
+                    const storagePool = storagePools.find(pool => pool.connectionName === this.state.connectionName && pool.name === selectedPool);
                     if (storagePool)
                         storagePoolRefresh({ connectionName: storagePool.connectionName, objPath: storagePool.id });
                 }
@@ -1589,6 +1728,7 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                     storageSizeUnit={this.state.storageSizeUnit}
                     onValueChanged={this.onValueChanged}
                     storagePoolName={this.state.storagePool}
+                    newStoragePoolName={this.state.newStoragePool}
                     storagePools={storagePools.filter(pool => pool.connectionName === this.state.connectionName)}
                     storageVolume={this.state.storageVolume}
                     vms={vms}
@@ -1604,6 +1744,11 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                     onValueChanged={this.onValueChanged}
                     validationFailed={validationFailed}
                     minimumMemory={this.state.minimumMemory}
+                />
+                <CpuRow
+                    vcpu={this.state.vcpu}
+                    onValueChanged={this.onValueChanged}
+                    validationFailed={validationFailed}
                 />
             </>
         );
@@ -1624,6 +1769,9 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                 }
                 {showCloudInitRow &&
                 <CloudInitOptionsRow validationFailed={validationFailed}
+                                     cloudInitMode={this.state.cloudInitMode}
+                                     cloudInitUserData={this.state.cloudInitUserData}
+                                     cloudInitNetworkConfig={this.state.cloudInitNetworkConfig}
                                      rootPassword={this.state.rootPassword}
                                      userLogin={this.state.userLogin}
                                      userPassword={this.state.userPassword}
@@ -1678,7 +1826,7 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                 </Form>
             );
 
-        const unattendedInstallation = this.state.rootPassword || this.state.userLogin || this.state.userPassword;
+        const usesFormBasedUnattendedInstallation = this.state.cloudInitMode !== "yaml" && (this.state.rootPassword || this.state.userLogin || this.state.userPassword);
         // This happens if offlineToken was supplied and we are either still obtaining access token (validating offline token) or failed to obtain one
         const downloadingRhelDisabled = !isEmpty(this.state.offlineToken) && isEmpty(this.state.accessToken);
         let createAndEdit = (
@@ -1689,14 +1837,14 @@ export class CreateVmModal extends React.Component<CreateVmModalProps, CreateVmM
                     isAriaDisabled={!!(
                         this.state.createMode === EDIT ||
                         Object.getOwnPropertyNames(validationFailed).length > 0 ||
-                        (this.state.sourceType === DOWNLOAD_AN_OS && unattendedInstallation) ||
+                        (this.state.sourceType === DOWNLOAD_AN_OS && usesFormBasedUnattendedInstallation) ||
                         downloadingRhelDisabled
                     )}
                     onClick={() => this.onCreateClicked(false)}>
                 {this.props.mode == 'create' ? _("Create and edit") : _("Import and edit")}
             </Button>
         );
-        if (unattendedInstallation) {
+        if (usesFormBasedUnattendedInstallation) {
             createAndEdit = (
                 <Tooltip id='create-and-edit-disabled-tooltip'
                          key="create-and-edit-tooltip"

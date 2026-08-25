@@ -9,6 +9,7 @@ import sys
 import tempfile
 import traceback
 import xml.etree.ElementTree as ET
+import base64
 from contextlib import contextmanager
 from urllib.parse import urlparse
 
@@ -100,28 +101,64 @@ def prepare_cloud_init(args):
             suffix="-user-data",
             mode='w+'
         )
-        user_data_file.write("#cloud-config\n")
-        if args['userLogin']:
-            user_data_file.write("users:\n")
-            user_data_file.write(f"  - name: {args['userLogin']}\n")
-            if 'sshKeys' in args and len(args['sshKeys']) > 0:
-                user_data_file.write("    ssh_authorized_keys:\n")
-                for key in args['sshKeys']:
-                    user_data_file.write(f"      - {key}\n")
+        network_config_file = None
+        try:
+            if args.get('cloudInitMode') == 'yaml':
+                user_data = args.get('cloudInitUserData')
+                if not user_data and args.get('cloudInitUserDataB64'):
+                    try:
+                        user_data = base64.b64decode(args['cloudInitUserDataB64']).decode('utf-8')
+                    except Exception as ex:
+                        raise ValueError("Invalid cloud-init user-data: unable to decode base64 content") from ex
 
-        if args['rootPassword'] or args['userPassword']:
-            # enable SSH password login if any password is set
-            user_data_file.write("ssh_pwauth: true\n")
-            user_data_file.write("chpasswd:\n")
-            user_data_file.write("  list: |\n")
-            if args['rootPassword']:
-                user_data_file.write(f"    root:{args['rootPassword']}\n")
-            if args['userPassword']:
-                user_data_file.write(f"    {args['userLogin']}:{args['userPassword']}\n")
-            user_data_file.write("  expire: False\n")
+                network_config = args.get('cloudInitNetworkConfig')
+                if not network_config and args.get('cloudInitNetworkConfigB64'):
+                    try:
+                        network_config = base64.b64decode(args['cloudInitNetworkConfigB64']).decode('utf-8')
+                    except Exception as ex:
+                        raise ValueError("Invalid cloud-init network-config: unable to decode base64 content") from ex
 
-        user_data_file.flush()
-        params.append(f"user-data={user_data_file.name}")
+                if user_data:
+                    user_data_file.write(user_data)
+                if network_config:
+                    network_config_file = tempfile.NamedTemporaryFile(
+                        prefix="cockpit-machines-",
+                        suffix="-network-config",
+                        mode='w+'
+                    )
+                    network_config_file.write(network_config)
+                    network_config_file.flush()
+            else:
+                user_data_file.write("#cloud-config\n")
+                if args['userLogin']:
+                    user_data_file.write("users:\n")
+                    user_data_file.write(f"  - name: {args['userLogin']}\n")
+                    if 'sshKeys' in args and len(args['sshKeys']) > 0:
+                        user_data_file.write("    ssh_authorized_keys:\n")
+                        for key in args['sshKeys']:
+                            user_data_file.write(f"      - {key}\n")
+
+                if args['rootPassword'] or args['userPassword']:
+                    # enable SSH password login if any password is set
+                    user_data_file.write("ssh_pwauth: true\n")
+                    user_data_file.write("chpasswd:\n")
+                    user_data_file.write("  list: |\n")
+                    if args['rootPassword']:
+                        user_data_file.write(f"    root:{args['rootPassword']}\n")
+                    if args['userPassword']:
+                        user_data_file.write(f"    {args['userLogin']}:{args['userPassword']}\n")
+                    user_data_file.write("  expire: False\n")
+
+            user_data_file.flush()
+            cloud_init_opts = [f"user-data={user_data_file.name}"]
+            if network_config_file:
+                cloud_init_opts.append(f"network-config={network_config_file.name}")
+            params.append(",".join(cloud_init_opts))
+            yield params
+        finally:
+            user_data_file.close()
+            if network_config_file:
+                network_config_file.close()
 
     yield params
 
@@ -192,7 +229,10 @@ def prepare_virt_install_params(args):
                 if args['storagePool'] not in ['NewVolumeQCOW2', 'NewVolumeRAW']:
                     disk = f"vol={args['storagePool']}/{args['storageVolume']}"
                 else:
-                    disk = f"size={args['storageSize']}"
+                    if args.get('newStoragePool') and args['newStoragePool'] != "default":
+                        disk = f"pool={args['newStoragePool']},size={args['storageSize']}"
+                    else:
+                        disk = f"size={args['storageSize']}"
                     if args['storagePool'] == 'NewVolumeQCOW2':
                         disk += ",format=qcow2"
                     elif args['storagePool'] == 'NewVolumeRAW':
@@ -210,7 +250,7 @@ def prepare_virt_install_params(args):
 
         # VCPUs
         if 'vcpu' in args:
-            params += ['--vcpus', args['vcpu']]
+            params += ['--vcpus', str(args['vcpu'])]
 
         # Firmware
         if 'firmware' in args:
@@ -271,12 +311,15 @@ def install_vm(args):
 def inject_metadata(xml):
     # Register used namespaces
     ns = {"cockpit_machines": "https://github.com/cockpit-project/cockpit-machines"}
+    ns_uri = ns["cockpit_machines"]
     ET.register_namespace("cockpit_machines", ns["cockpit_machines"])
     ET.register_namespace("libosinfo", "http://libosinfo.org/xmlns/libvirt/domain/1.0")
 
     # ET.fromstring() already wants UTF-8 encoded bytes
     root = ET.fromstring(xml)
     metadata = root.find('metadata')
+    if metadata is None:
+        metadata = ET.SubElement(root, 'metadata')
     cockpit_machines_metadata = metadata.find('cockpit_machines:data', ns)
     if cockpit_machines_metadata:
         metadata.remove(cockpit_machines_metadata)
@@ -289,27 +332,38 @@ def inject_metadata(xml):
     if args['type'] == 'install' or args['startVm'] or args['sourceType'] == 'disk_image':
         has_install_phase = "false"
 
-    METADATA = f'''
-<cockpit_machines:data xmlns:cockpit_machines="https://github.com/cockpit-project/cockpit-machines"> \
-  <cockpit_machines:has_install_phase>{has_install_phase}</cockpit_machines:has_install_phase> \
-  <cockpit_machines:install_source_type>{args['sourceType']}</cockpit_machines:install_source_type> \
-  <cockpit_machines:install_source>{args['source']}</cockpit_machines:install_source> \
-  <cockpit_machines:os_variant>{args['os']}</cockpit_machines:os_variant> \
-'''
+    cockpit_machines_metadata_new = ET.Element(f"{{{ns_uri}}}data")
+
+    def add_metadata_element(name, value):
+        if value is None:
+            return
+        element = ET.SubElement(cockpit_machines_metadata_new, f"{{{ns_uri}}}{name}")
+        element.text = str(value)
+
+    add_metadata_element("has_install_phase", has_install_phase)
+    add_metadata_element("install_source_type", args['sourceType'])
+    add_metadata_element("install_source", args['source'])
+    add_metadata_element("os_variant", args['os'])
+
     if has_install_phase == "true" and args['sourceType'] == 'cloud':
+        if args.get('cloudInitMode'):
+            add_metadata_element("cloud_init_mode", args['cloudInitMode'])
+        if args.get('cloudInitUserData'):
+            cloud_init_user_data_b64 = base64.b64encode(args['cloudInitUserData'].encode('utf-8')).decode('ascii')
+            add_metadata_element("cloud_init_user_data_b64", cloud_init_user_data_b64)
+        if args.get('cloudInitNetworkConfig'):
+            cloud_init_network_config_b64 = base64.b64encode(args['cloudInitNetworkConfig'].encode('utf-8')).decode('ascii')
+            add_metadata_element("cloud_init_network_config_b64", cloud_init_network_config_b64)
         if args['rootPassword']:
-            METADATA += f"<cockpit_machines:root_password>{args['rootPassword']}</cockpit_machines:root_password>"
+            add_metadata_element("root_password", args['rootPassword'])
         if args['userLogin']:
-            METADATA += f"<cockpit_machines:user_login>{args['userLogin']}</cockpit_machines:user_login>"
+            add_metadata_element("user_login", args['userLogin'])
         if args['userPassword']:
-            METADATA += f"<cockpit_machines:user_password>{args['userPassword']}</cockpit_machines:user_password>"
+            add_metadata_element("user_password", args['userPassword'])
 
     if args['extraArguments']:
-        METADATA += f"<cockpit_machines:extra_arguments>{args['extraArguments']}</cockpit_machines:extra_arguments>"
+        add_metadata_element("extra_arguments", args['extraArguments'])
 
-    METADATA += "</cockpit_machines:data>"
-
-    cockpit_machines_metadata_new = ET.fromstring(METADATA)
     metadata.append(cockpit_machines_metadata_new)
 
     updated_xml = ET.tostring(root)
