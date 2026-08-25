@@ -160,7 +160,8 @@ def prepare_cloud_init(args):
             if network_config_file:
                 network_config_file.close()
 
-    yield params
+    else:
+        yield params
 
 
 def prepare_installation_source(args):
