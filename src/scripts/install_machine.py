@@ -102,6 +102,15 @@ def prepare_cloud_init(args):
             mode='w+'
         )
         network_config_file = None
+        # virt-install does not generate a meta-data file, but cloud-init's
+        # NoCloud datasource requires both 'user-data' and 'meta-data' to be
+        # present on the 'cidata' volume; without meta-data the whole seed is
+        # silently ignored. So always provide one ourselves.
+        meta_data_file = tempfile.NamedTemporaryFile(
+            prefix="cockpit-machines-",
+            suffix="-meta-data",
+            mode='w+'
+        )
         try:
             if args.get('cloudInitMode') == 'yaml':
                 user_data = args.get('cloudInitUserData')
@@ -150,13 +159,22 @@ def prepare_cloud_init(args):
                     user_data_file.write("  expire: False\n")
 
             user_data_file.flush()
-            cloud_init_opts = [f"user-data={user_data_file.name}"]
+
+            # json.dumps() gives us a YAML-safe quoted scalar for arbitrary VM names
+            meta_data_file.write(f"instance-id: {json.dumps(args['vmName'])}\n")
+            meta_data_file.flush()
+
+            cloud_init_opts = [
+                f"user-data={user_data_file.name}",
+                f"meta-data={meta_data_file.name}",
+            ]
             if network_config_file:
                 cloud_init_opts.append(f"network-config={network_config_file.name}")
             params.append(",".join(cloud_init_opts))
             yield params
         finally:
             user_data_file.close()
+            meta_data_file.close()
             if network_config_file:
                 network_config_file.close()
 
